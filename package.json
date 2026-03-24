@@ -4,7 +4,16 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "web": "pnpm --filter ./packages/web",
+    "dev": "run-p dev:*",
+    "dev:web": "pnpm web dev",
+    "lint": "biome check",
+    "lint:fix": "biome check --fix",
+    "typecheck": "run-p typecheck:*",
+    "typecheck:web": "pnpm web typecheck",
+    "test": "run-s test:*",
+    "test:web": "pnpm web test",
+    "preinstall": "npx only-allow pnpm"
   },
   "keywords": [],
   "author": "",
