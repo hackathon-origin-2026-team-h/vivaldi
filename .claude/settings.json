@@ -30,7 +30,7 @@
       "Bash(find:*)",
       "Bash(grep:*)",
       "Bash(pnpm run build:*)",
-      "Bash(docker exec:*)",
+      "Bash(docker exec:*)"
     ],
     "deny": [],
     "ask": []

@@ -1,5 +1,5 @@
 {
-  "name": "web",
+  "name": "vivaldi",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint",
+    "lint": "biome check",
+    "lint:fix": "biome check --fix",
     "test": "vitest run",
     "test:watch": "vitest",
     "db:generate": "prisma generate",
