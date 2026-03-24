@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "web": "pnpm --filter ./packages/web",
-    "dev": "run-p dev:*",
+    "dev": "pnpm run dev:web",
     "dev:web": "pnpm web dev",
     "lint": "biome check",
     "lint:fix": "biome check --fix",
