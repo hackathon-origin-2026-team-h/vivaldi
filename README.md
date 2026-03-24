@@ -19,6 +19,6 @@ See at http://localhost:3000/
 
 ### スキーマの変更
 
-1. packages/web/prisma/schema.prismaにモデルを追加する
+1. prisma/schema.prismaにモデルを追加する
 2. pnpm db:migrate --name <名前> でマイグレーション実行
 3. import { prisma } from "@/lib/prisma" で使用
