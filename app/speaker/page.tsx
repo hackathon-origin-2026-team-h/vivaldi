@@ -109,8 +109,8 @@ export default function SpeakerPage() {
   useEffect(() => {
     void fetch("/api/sessions", { method: "POST" })
       .then((res) => res.json())
-      .then(async (body: { id: string }) => {
-        const id = body.id;
+      .then(async (body) => {
+        const { id } = body as { id: string };
         setSessionId(id);
         sessionIdRef.current = id;
 
@@ -301,7 +301,7 @@ export default function SpeakerPage() {
           </p>
 
           {qrDataUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
+            // biome-ignore lint/performance/noImgElement: QR code data URL cannot use next/image
             <img src={qrDataUrl} alt="参加者用QRコード" width={180} height={180} className="rounded-xl" />
           ) : (
             <div
