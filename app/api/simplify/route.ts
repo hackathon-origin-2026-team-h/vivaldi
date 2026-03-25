@@ -1,31 +1,36 @@
-import { handleApiError, parseBody, TextBodySchema } from "@/lib/api";
+import * as v from "valibot";
+import { handleApiError } from "@/lib/api";
 import { defaultPipeline, runPipeline } from "@/lib/llm";
 
-export async function POST(request: Request) {
-  const parsed = await parseBody(request, TextBodySchema);
-  if (!parsed.ok) return parsed.response;
+const RequestSchema = v.object({
+  text: v.pipe(v.string(), v.nonEmpty("text is required")),
+});
 
-  const encoder = new TextEncoder();
-  const stream = new ReadableStream({
-    async start(controller) {
-      try {
-        const result = await runPipeline(parsed.data.text, defaultPipeline);
-        controller.enqueue(encoder.encode(JSON.stringify(result)));
-        controller.close();
-      } catch (err) {
-        controller.error(err);
-      }
-    },
-  });
+export async function POST(req: Request) {
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    return new Response(JSON.stringify({ error: "Invalid JSON body" }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
 
-  return new Response(stream, {
-    headers: {
-      "Content-Type": "application/json",
-      "Transfer-Encoding": "chunked",
-    },
-  });
-}
+  const parsed = v.safeParse(RequestSchema, body);
+  if (!parsed.success) {
+    return new Response(JSON.stringify({ error: parsed.issues[0]?.message ?? "Invalid request" }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
 
-export function onError(err: unknown) {
-  return handleApiError("process text", err);
+  try {
+    const result = await runPipeline(parsed.output.text, defaultPipeline);
+    return new Response(JSON.stringify(result), {
+      headers: { "Content-Type": "application/json" },
+    });
+  } catch (err) {
+    return handleApiError("process text", err);
+  }
 }

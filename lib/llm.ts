@@ -35,7 +35,9 @@ async function callLLM(system: string, text: string, maxTokens: number, label?: 
     messages: [{ role: "user", content: text }],
   });
   const message = await stream.finalMessage();
-  if (label) console.log(`[llm:${label}] ${Date.now() - start}ms`);
+  if (process.env.NODE_ENV !== "production") {
+    if (label) console.log(`[llm:${label}] ${Date.now() - start}ms`);
+  }
   return extractText(message) || text;
 }
 
@@ -63,7 +65,9 @@ async function simplifyStep(text: string): Promise<{ output: string; terms: Term
     messages: [{ role: "user", content: text }],
   });
   const message = await stream.finalMessage();
-  console.log(`[llm:simplify] ${Date.now() - start}ms`);
+  if (process.env.NODE_ENV !== "production") {
+    console.log(`[llm:simplify] ${Date.now() - start}ms`);
+  }
   const raw = extractText(message);
   if (!raw) return { output: text, terms: [] };
   const parsed = parseJsonResponse(SimplifyResponseSchema, raw);
