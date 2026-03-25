@@ -97,11 +97,7 @@ export default function SpeakerPage() {
           processor.connect(audioCtx.destination);
         } catch (error) {
           console.error("Failed to initialize audio processing after socket open:", error);
-          setError(
-            error instanceof Error
-              ? error.message
-              : "An error occurred while initializing audio recording."
-          );
+          setError(error instanceof Error ? error.message : "An error occurred while initializing audio recording.");
           stopRecording();
         }
       });
