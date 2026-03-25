@@ -71,7 +71,12 @@ async function simplifyStep(text: string): Promise<{ output: string; terms: Term
 }
 
 async function translateStep(text: string): Promise<string> {
-  return callLLM("日本語を自然な英語に翻訳してください。テキストのみ返してください（JSON不要）。", text, 512, "translate");
+  return callLLM(
+    "日本語を自然な英語に翻訳してください。テキストのみ返してください（JSON不要）。",
+    text,
+    512,
+    "translate",
+  );
 }
 
 export async function runPipeline(text: string, steps: PipelineStep[]): Promise<PipelineResult> {
