@@ -1,14 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { type UserPersona, defaultPersona, parsePersona } from "@/lib/persona";
 
 type SessionStatus = "BEFORE" | "DURING" | "AFTER";
-
-type UserPersona = {
-  knownDomains: string[];
-  unknownDomains: string[];
-  feedbackHistory: Array<{ inference: string; timestamp: number }>;
-};
 
 type DisplaySegment = {
   id: number;
@@ -21,18 +16,12 @@ type DisplaySegment = {
 
 const PERSONA_KEY = "vivaldi:userPersona";
 
-const defaultPersona: UserPersona = {
-  knownDomains: [],
-  unknownDomains: [],
-  feedbackHistory: [],
-};
-
 function loadPersona(): UserPersona {
   if (typeof window === "undefined") return defaultPersona;
   try {
     const raw = localStorage.getItem(PERSONA_KEY);
     if (!raw) return defaultPersona;
-    return JSON.parse(raw) as UserPersona;
+    return parsePersona(JSON.parse(raw));
   } catch {
     return defaultPersona;
   }

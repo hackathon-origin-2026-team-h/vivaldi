@@ -1,30 +1,23 @@
 import { NextResponse } from "next/server";
 import { gemini } from "@/lib/gemini";
+import { parsePersona } from "@/lib/persona";
 
-type UserPersona = {
-  knownDomains: string[];
-  unknownDomains: string[];
-  feedbackHistory: Array<{ inference: string; timestamp: number }>;
-};
+const MAX_FEEDBACK_HISTORY = 10;
 
 export async function POST(request: Request) {
-  let body: { text?: string; userPersona?: UserPersona };
+  let body: { text?: string; userPersona?: unknown };
   try {
-    body = (await request.json()) as { text?: string; userPersona?: UserPersona };
+    body = (await request.json()) as { text?: string; userPersona?: unknown };
   } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const { text, userPersona } = body;
+  const { text } = body;
   if (!text) {
     return NextResponse.json({ error: "text is required" }, { status: 400 });
   }
 
-  const persona: UserPersona = userPersona ?? {
-    knownDomains: [],
-    unknownDomains: [],
-    feedbackHistory: [],
-  };
+  const persona = parsePersona(body.userPersona);
 
   try {
     const response = await gemini.models.generateContent({
@@ -51,9 +44,8 @@ ${JSON.stringify(persona)}
       ],
     });
 
-    const MAX_FEEDBACK_HISTORY = 10;
     const inference = response.text?.trim() ?? "";
-    const updatedPersona: UserPersona = {
+    const updatedPersona = {
       ...persona,
       feedbackHistory: [...persona.feedbackHistory, { inference, timestamp: Date.now() }].slice(
         -MAX_FEEDBACK_HISTORY,

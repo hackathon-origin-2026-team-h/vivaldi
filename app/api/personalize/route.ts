@@ -1,11 +1,6 @@
 import { NextResponse } from "next/server";
 import { gemini } from "@/lib/gemini";
-
-type UserPersona = {
-  knownDomains: string[];
-  unknownDomains: string[];
-  feedbackHistory: Array<{ inference: string; timestamp: number }>;
-};
+import { type UserPersona, parsePersona } from "@/lib/persona";
 
 function summarizePersona(persona: UserPersona): string {
   const parts: string[] = [];
@@ -23,23 +18,19 @@ function summarizePersona(persona: UserPersona): string {
 }
 
 export async function POST(request: Request) {
-  let body: { text?: string; userPersona?: UserPersona };
+  let body: { text?: string; userPersona?: unknown };
   try {
-    body = (await request.json()) as { text?: string; userPersona?: UserPersona };
+    body = (await request.json()) as { text?: string; userPersona?: unknown };
   } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const { text, userPersona } = body;
+  const { text } = body;
   if (!text) {
     return NextResponse.json({ error: "text is required" }, { status: 400 });
   }
 
-  const persona: UserPersona = userPersona ?? {
-    knownDomains: [],
-    unknownDomains: [],
-    feedbackHistory: [],
-  };
+  const persona = parsePersona(body.userPersona);
 
   try {
     const response = await gemini.models.generateContent({
