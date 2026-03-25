@@ -30,6 +30,11 @@ export function buildPages(
           displayText: getDisplayedSegmentText(segment),
           isClarified: segment.clarifiedText !== null,
           showFeedbackButtons: true,
+          isFeedbackPending: segment.isFeedbackPending,
+          feedbackDone: segment.feedbackDone,
+          feedbackError: segment.feedbackError,
+          feedbackInference: segment.feedbackInference,
+          isRepersonalizing: segment.isRepersonalizing,
         })),
       },
     ];
@@ -66,6 +71,11 @@ export function buildPages(
           displayText: remainingDisplayText,
           isClarified: segment.clarifiedText !== null,
           showFeedbackButtons: true,
+          isFeedbackPending: segment.isFeedbackPending,
+          feedbackDone: segment.feedbackDone,
+          feedbackError: segment.feedbackError,
+          feedbackInference: segment.feedbackInference,
+          isRepersonalizing: segment.isRepersonalizing,
         });
         currentPageHeight += pageGap + fullChunkHeight;
         remainingDisplayText = "";
@@ -98,6 +108,11 @@ export function buildPages(
           displayText: remainingDisplayText.slice(0, 1),
           isClarified: segment.clarifiedText !== null,
           showFeedbackButtons: isContinuationChunk,
+          isFeedbackPending: segment.isFeedbackPending,
+          feedbackDone: segment.feedbackDone,
+          feedbackError: segment.feedbackError,
+          feedbackInference: segment.feedbackInference,
+          isRepersonalizing: segment.isRepersonalizing,
         });
         currentPageHeight = measureChunkHeight(null, remainingDisplayText.slice(0, 1), isContinuationChunk);
         remainingDisplayText = remainingDisplayText.slice(1);
@@ -112,6 +127,11 @@ export function buildPages(
         displayText: fittedDisplayText,
         isClarified: segment.clarifiedText !== null,
         showFeedbackButtons: isContinuationChunk,
+        isFeedbackPending: segment.isFeedbackPending,
+        feedbackDone: segment.feedbackDone,
+        feedbackError: segment.feedbackError,
+        feedbackInference: segment.feedbackInference,
+        isRepersonalizing: segment.isRepersonalizing,
       });
       currentPageHeight += pageGap + measureChunkHeight(nextRawText, fittedDisplayText, isContinuationChunk);
       remainingDisplayText = remainingDisplayText.slice(fittedDisplayText.length);
@@ -144,7 +164,12 @@ export function haveSamePagination(currentPages: TranscriptPageDraft[], nextPage
         chunk.rawText === nextChunk?.rawText &&
         chunk.displayText === nextChunk?.displayText &&
         chunk.isClarified === nextChunk?.isClarified &&
-        chunk.showFeedbackButtons === nextChunk?.showFeedbackButtons
+        chunk.showFeedbackButtons === nextChunk?.showFeedbackButtons &&
+        chunk.isFeedbackPending === nextChunk?.isFeedbackPending &&
+        chunk.feedbackDone === nextChunk?.feedbackDone &&
+        chunk.feedbackError === nextChunk?.feedbackError &&
+        chunk.feedbackInference === nextChunk?.feedbackInference &&
+        chunk.isRepersonalizing === nextChunk?.isRepersonalizing
       );
     });
   });

@@ -6,8 +6,16 @@ import { type ReactNode, type RefObject, useCallback, useEffect, useRef, useStat
 import UnderstandingButtons from "@/components/UnderstandingButtons";
 import styles from "./attendee-page-client.module.css";
 import { QUESTION_BUBBLE_DURATION_MS, type TranscriptChunk, type TranscriptPage } from "./attendee-page-model";
-
-type BubbleMode = "hidden" | "jump" | "question" | "thumbsup";
+import {
+  type BubbleMode,
+  CONFETTI_PARTICLES,
+  getConfettiStyle,
+  isAssetBubbleMode,
+  resolveBubbleMode,
+  TEMPORARY_BUBBLE_HIDE_DURATION_MS,
+  type TemporaryBubbleVisual,
+  THUMBSUP_BUBBLE_IMAGE_SRC,
+} from "./attendee-page-visuals";
 
 type AttendeeViewportProps = {
   children: ReactNode;
@@ -36,17 +44,9 @@ type TranscriptFeedbackButtonsProps = {
   interactive: boolean;
   onUnderstand?: () => void;
   onUnclear?: () => void;
-  selectedReaction?: "confused" | "understood";
+  selectedReaction?: "confused" | "understood" | null;
   visible: boolean;
 };
-
-const CLAP_BURST_ITEM_CLASSES = [
-  styles.clapBurstItem1,
-  styles.clapBurstItem2,
-  styles.clapBurstItem3,
-  styles.clapBurstItem4,
-  styles.clapBurstItem5,
-];
 
 export function AttendeeViewport({
   children,
@@ -64,19 +64,16 @@ export function AttendeeViewport({
   const bubbleRef = useRef<HTMLButtonElement>(null);
   const bubbleTailRef = useRef<HTMLSpanElement>(null);
   const bubbleContentRef = useRef<HTMLSpanElement>(null);
-  const clapRefs = useRef<Array<HTMLDivElement | null>>([]);
-  const temporaryBubbleVisual = useTemporaryBubbleVisual({
+  const confettiRefs = useRef<Array<HTMLSpanElement | null>>([]);
+  const { isClosing, visual: temporaryBubbleVisual } = useTemporaryBubbleVisual({
     questionBubbleNonce,
     thumbsupBubbleNonce,
   });
-  const bubbleMode: BubbleMode =
-    temporaryBubbleVisual === "question"
-      ? "question"
-      : temporaryBubbleVisual === "thumbsup"
-        ? "thumbsup"
-        : showJumpToLatest
-          ? "jump"
-          : "hidden";
+  const bubbleMode = resolveBubbleMode({
+    isClosing,
+    showJumpToLatest,
+    temporaryBubbleVisual,
+  });
 
   useThinkmanBubbleAnimation({
     bubbleContentRef,
@@ -84,33 +81,14 @@ export function AttendeeViewport({
     bubbleRef,
     bubbleTailRef,
   });
-  useClapBurstAnimation({
-    clapRefs,
+  useConfettiBurstAnimation({
+    confettiRefs,
     thumbsupBubbleNonce,
   });
 
   return (
     <main className={styles.attendeeScreen}>
-      <div aria-hidden="true" className={styles.clapBurstLayer}>
-        {CLAP_BURST_ITEM_CLASSES.map((itemClassName, index) => (
-          <div
-            key={itemClassName}
-            ref={(node) => {
-              clapRefs.current[index] = node;
-            }}
-            className={`${styles.clapBurstItem} ${itemClassName}`}
-          >
-            <Image
-              alt=""
-              className={styles.clapBurstImage}
-              draggable={false}
-              height={512}
-              src="/images/clap.png"
-              width={512}
-            />
-          </div>
-        ))}
-      </div>
+      <ConfettiLayer confettiRefs={confettiRefs} />
 
       <div className={styles.decorationRail}>
         <div className={styles.thinkmanWrap}>
@@ -139,22 +117,9 @@ export function AttendeeViewport({
           <span
             ref={bubbleContentRef}
             aria-hidden="true"
-            className={bubbleMode === "thumbsup" ? styles.bubbleAssetWrap : styles.bubbleIcon}
+            className={isAssetBubbleMode(bubbleMode) ? styles.bubbleAssetWrap : styles.bubbleIcon}
           >
-            {bubbleMode === "thumbsup" ? (
-              <Image
-                alt=""
-                className={styles.bubbleThumbsup}
-                draggable={false}
-                height={512}
-                src="/images/thumbsup.png"
-                width={512}
-              />
-            ) : bubbleMode === "question" ? (
-              "❓"
-            ) : (
-              "☟"
-            )}
+            <BubbleGraphic bubbleMode={bubbleMode} />
           </span>
           <span className={styles.srOnly}>{showJumpToLatest ? "最新の文章へ戻る" : "Thinkmanが考えています"}</span>
         </button>
@@ -279,7 +244,7 @@ function TranscriptBlock({
         onUnclear={() => {
           onRequestClarify(chunk.segmentId);
         }}
-        selectedReaction={chunk.isClarified ? "confused" : undefined}
+        selectedReaction={getSelectedReaction(chunk)}
         visible={chunk.showFeedbackButtons}
       />
     </article>
@@ -316,6 +281,56 @@ function TranscriptFeedbackButtons({
   );
 }
 
+function getSelectedReaction(chunk: TranscriptChunk): "confused" | null {
+  if (chunk.feedbackError) {
+    return null;
+  }
+
+  if (chunk.isClarified || chunk.isFeedbackPending || chunk.feedbackDone || chunk.isRepersonalizing) {
+    return "confused";
+  }
+
+  return null;
+}
+
+function ConfettiLayer({ confettiRefs }: { confettiRefs: RefObject<Array<HTMLSpanElement | null>> }) {
+  return (
+    <div aria-hidden="true" className={styles.confettiLayer}>
+      {CONFETTI_PARTICLES.map((particle, index) => (
+        <span
+          key={`${particle.color}-${particle.left}`}
+          ref={(node) => {
+            confettiRefs.current[index] = node;
+          }}
+          className={styles.confettiPiece}
+          style={getConfettiStyle(particle)}
+        />
+      ))}
+    </div>
+  );
+}
+
+function BubbleGraphic({ bubbleMode }: { bubbleMode: BubbleMode }) {
+  if (isAssetBubbleMode(bubbleMode)) {
+    return (
+      <Image
+        alt=""
+        className={styles.bubbleThumbsup}
+        draggable={false}
+        height={512}
+        src={THUMBSUP_BUBBLE_IMAGE_SRC}
+        width={512}
+      />
+    );
+  }
+
+  if (bubbleMode === "jump") {
+    return "☟";
+  }
+
+  return null;
+}
+
 function useTemporaryBubbleVisual({
   questionBubbleNonce,
   thumbsupBubbleNonce,
@@ -323,20 +338,34 @@ function useTemporaryBubbleVisual({
   questionBubbleNonce: number;
   thumbsupBubbleNonce: number;
 }) {
-  const [visual, setVisual] = useState<"question" | "thumbsup" | null>(null);
+  const [visual, setVisual] = useState<TemporaryBubbleVisual>(null);
+  const [isClosing, setIsClosing] = useState(false);
   const lastQuestionNonceRef = useRef(0);
   const lastThumbsupNonceRef = useRef(0);
-  const timerRef = useRef<number | null>(null);
+  const closeTimerRef = useRef<number | null>(null);
+  const displayTimerRef = useRef<number | null>(null);
 
   const startTemporaryVisual = useCallback((nextVisual: "question" | "thumbsup") => {
-    if (timerRef.current !== null) {
-      window.clearTimeout(timerRef.current);
+    if (displayTimerRef.current !== null) {
+      window.clearTimeout(displayTimerRef.current);
     }
 
+    if (closeTimerRef.current !== null) {
+      window.clearTimeout(closeTimerRef.current);
+    }
+
+    setIsClosing(false);
     setVisual(nextVisual);
-    timerRef.current = window.setTimeout(() => {
+
+    displayTimerRef.current = window.setTimeout(() => {
       setVisual(null);
-      timerRef.current = null;
+      setIsClosing(true);
+      displayTimerRef.current = null;
+
+      closeTimerRef.current = window.setTimeout(() => {
+        setIsClosing(false);
+        closeTimerRef.current = null;
+      }, TEMPORARY_BUBBLE_HIDE_DURATION_MS);
     }, QUESTION_BUBBLE_DURATION_MS);
   }, []);
 
@@ -360,13 +389,20 @@ function useTemporaryBubbleVisual({
 
   useEffect(() => {
     return () => {
-      if (timerRef.current !== null) {
-        window.clearTimeout(timerRef.current);
+      if (displayTimerRef.current !== null) {
+        window.clearTimeout(displayTimerRef.current);
+      }
+
+      if (closeTimerRef.current !== null) {
+        window.clearTimeout(closeTimerRef.current);
       }
     };
   }, []);
 
-  return visual;
+  return {
+    isClosing,
+    visual,
+  };
 }
 
 function useThinkmanBubbleAnimation({
@@ -497,36 +533,38 @@ function useThinkmanBubbleAnimation({
       });
       gsap.set(bubbleContentNode, { autoAlpha: 1, rotate: 0, scale: 1, y: 0 });
 
+      const bubbleRevealDelay = 0.1;
       const revealTimeline = gsap.timeline();
       revealTimeline
-        .to(bubbleNode, {
+        .to(bubbleTailNode, {
           autoAlpha: 1,
-          duration: 0.42,
-          ease: "back.out(1.9)",
+          duration: 0.22,
+          ease: "back.out(2.2)",
           scale: 1,
           x: 0,
           y: 0,
         })
         .to(
-          bubbleTailNode,
+          bubbleNode,
           {
             autoAlpha: 1,
-            duration: 0.26,
-            ease: "back.out(2.2)",
+            duration: 0.42,
+            ease: "back.out(1.9)",
             scale: 1,
             x: 0,
             y: 0,
           },
-          0.08,
-        );
-
-      if (bubbleMode === "jump") {
-        playJumpBounce();
-      } else if (bubbleMode === "question") {
-        playQuestionPop();
-      } else {
-        playThumbsupPop();
-      }
+          bubbleRevealDelay,
+        )
+        .add(() => {
+          if (bubbleMode === "jump") {
+            playJumpBounce();
+          } else if (bubbleMode === "question") {
+            playQuestionPop();
+          } else {
+            playThumbsupPop();
+          }
+        }, bubbleRevealDelay + 0.06);
 
       previousBubbleModeRef.current = bubbleMode;
 
@@ -556,11 +594,11 @@ function useThinkmanBubbleAnimation({
   }, [bubbleContentRef, bubbleMode, bubbleRef, bubbleTailRef]);
 }
 
-function useClapBurstAnimation({
-  clapRefs,
+function useConfettiBurstAnimation({
+  confettiRefs,
   thumbsupBubbleNonce,
 }: {
-  clapRefs: RefObject<Array<HTMLDivElement | null>>;
+  confettiRefs: RefObject<Array<HTMLSpanElement | null>>;
   thumbsupBubbleNonce: number;
 }) {
   useEffect(() => {
@@ -568,58 +606,72 @@ function useClapBurstAnimation({
       return;
     }
 
-    const clapNodes = clapRefs.current.filter((node): node is HTMLDivElement => node !== null);
-    if (clapNodes.length === 0) {
+    const confettiNodes = confettiRefs.current.filter((node): node is HTMLSpanElement => node !== null);
+    if (confettiNodes.length === 0) {
       return;
     }
 
-    gsap.killTweensOf(clapNodes);
-    gsap.set(clapNodes, {
+    gsap.killTweensOf(confettiNodes);
+    gsap.set(confettiNodes, {
       autoAlpha: 0,
-      rotate: (_index: number) => (Math.random() - 0.5) * 42,
-      scale: 0.24,
-      transformOrigin: "50% 85%",
+      rotate: (_index: number) => CONFETTI_PARTICLES[_index]?.rotation ?? 0,
+      scale: 0.2,
+      transformOrigin: "50% 50%",
+      x: 0,
       y: 0,
     });
 
     const burstTimeline = gsap.timeline();
+
     burstTimeline
-      .to(clapNodes, {
-        autoAlpha: 1,
-        duration: 0.36,
-        ease: "back.out(2.4)",
-        rotate: (_index: number) => (Math.random() - 0.5) * 20,
-        scale: 1.08,
-        stagger: 0.05,
-      })
       .to(
-        clapNodes,
+        confettiNodes,
         {
-          duration: 0.2,
-          ease: "sine.inOut",
-          repeat: 1,
-          scale: 0.96,
-          yoyo: true,
+          autoAlpha: 1,
+          duration: 0.09,
+          ease: "power2.out",
+          scale: (_index: number) => CONFETTI_PARTICLES[_index]?.scale ?? 1,
+          stagger: 0.006,
         },
-        0.12,
+        0,
       )
       .to(
-        clapNodes,
+        confettiNodes,
+        {
+          duration: 0.92,
+          ease: "power3.out",
+          rotate: (_index: number) => (CONFETTI_PARTICLES[_index]?.rotation ?? 0) * 0.5,
+          x: (_index: number) => CONFETTI_PARTICLES[_index]?.driftX ?? 0,
+          y: (_index: number) => -(CONFETTI_PARTICLES[_index]?.fallY ?? 0),
+          stagger: 0.007,
+        },
+        0,
+      )
+      .to(
+        confettiNodes,
+        {
+          duration: 0.74,
+          ease: "power2.in",
+          rotate: (_index: number) => CONFETTI_PARTICLES[_index]?.rotation ?? 0,
+          y: (_index: number) => (CONFETTI_PARTICLES[_index]?.fallY ?? 0) * 0.26,
+          stagger: 0.006,
+        },
+        0.4,
+      )
+      .to(
+        confettiNodes,
         {
           autoAlpha: 0,
-          duration: 0.34,
-          ease: "power3.in",
-          rotate: (_index: number) => (Math.random() - 0.5) * 54,
-          scale: 0.52,
-          stagger: 0.04,
-          y: 24,
+          duration: 0.24,
+          ease: "power2.out",
+          stagger: 0.006,
         },
-        0.72,
+        0.86,
       );
 
     return () => {
       burstTimeline.kill();
-      gsap.killTweensOf(clapNodes);
+      gsap.killTweensOf(confettiNodes);
     };
-  }, [clapRefs, thumbsupBubbleNonce]);
+  }, [confettiRefs, thumbsupBubbleNonce]);
 }

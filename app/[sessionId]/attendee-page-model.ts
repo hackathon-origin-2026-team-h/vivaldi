@@ -21,8 +21,12 @@ export type DisplaySegment = {
   polishedText: string;
   personalizedText: string | null;
   clarifiedText: string | null;
-  isClarifying: boolean;
   isPersonalizing: boolean;
+  isFeedbackPending: boolean;
+  feedbackDone: boolean;
+  feedbackError: boolean;
+  feedbackInference: string | null;
+  isRepersonalizing: boolean;
 };
 
 export type TranscriptChunk = {
@@ -32,6 +36,11 @@ export type TranscriptChunk = {
   displayText: string;
   isClarified: boolean;
   showFeedbackButtons: boolean;
+  isFeedbackPending: boolean;
+  feedbackDone: boolean;
+  feedbackError: boolean;
+  feedbackInference: string | null;
+  isRepersonalizing: boolean;
 };
 
 export type TranscriptChunkDraft = Omit<TranscriptChunk, "key">;
@@ -62,7 +71,21 @@ export function loadPersona(): UserPersona {
   }
 }
 
-export async function fetchPersonalized(text: string, userPersona: UserPersona): Promise<string> {
+export function savePersona(userPersona: UserPersona) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  localStorage.setItem(PERSONA_KEY, JSON.stringify(userPersona));
+}
+
+export async function fetchPersonalizedResult(
+  text: string,
+  userPersona: UserPersona,
+): Promise<{
+  failed: boolean;
+  text: string;
+}> {
   try {
     const response = await fetch("/api/personalize", {
       method: "POST",
@@ -71,18 +94,54 @@ export async function fetchPersonalized(text: string, userPersona: UserPersona):
     });
 
     if (!response.ok) {
-      return text;
+      return { failed: true, text };
     }
 
     const body = (await response.json()) as { personalized?: string };
-    return body.personalized ?? text;
+    return {
+      failed: false,
+      text: body.personalized ?? text,
+    };
   } catch {
-    return text;
+    return { failed: true, text };
   }
 }
 
-export async function fetchClarified(text: string, userPersona: UserPersona): Promise<string> {
-  return fetchPersonalized(text, buildClarificationPersona(userPersona));
+export async function fetchPersonalized(text: string, userPersona: UserPersona): Promise<string> {
+  const { text: personalizedText } = await fetchPersonalizedResult(text, userPersona);
+  return personalizedText;
+}
+
+export async function fetchFeedback(
+  text: string,
+  userPersona: UserPersona,
+): Promise<{
+  inference: string;
+  updatedPersona: UserPersona;
+} | null> {
+  try {
+    const response = await fetch("/api/feedback", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, userPersona }),
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const body = (await response.json()) as {
+      inference?: string;
+      updatedPersona?: unknown;
+    };
+
+    return {
+      inference: body.inference ?? "",
+      updatedPersona: parsePersona(body.updatedPersona),
+    };
+  } catch {
+    return null;
+  }
 }
 
 export function getDisplayedSegmentText(segment: DisplaySegment) {
@@ -104,8 +163,12 @@ export function createIncomingSegment({
     polishedText,
     personalizedText: null,
     clarifiedText: null,
-    isClarifying: false,
     isPersonalizing: true,
+    isFeedbackPending: false,
+    feedbackDone: false,
+    feedbackError: false,
+    feedbackInference: null,
+    isRepersonalizing: false,
   };
 }
 
@@ -115,17 +178,4 @@ export function updateSegmentInList(
   updater: (segment: DisplaySegment) => DisplaySegment,
 ) {
   return segments.map((segment) => (segment.id === segmentId ? updater(segment) : segment));
-}
-
-function buildClarificationPersona(userPersona: UserPersona): UserPersona {
-  return {
-    ...userPersona,
-    feedbackHistory: [
-      ...userPersona.feedbackHistory,
-      {
-        inference: "この文はまだ難しいので、もっと短く、もっとやさしい日本語で言い換えてほしい",
-        timestamp: Date.now(),
-      },
-    ],
-  };
 }

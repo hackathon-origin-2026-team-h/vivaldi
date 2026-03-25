@@ -2,12 +2,9 @@
   position: relative;
   height: 100svh;
   overflow: hidden;
-  font-family:
-    "Hiragino Maru Gothic ProN", "Hiragino Maru Gothic Pro", "YuKyokasho Yoko", "Arial Rounded MT Bold", sans-serif;
+  font-family: "KosugiMaru", sans-serif;
   color: #1f1510;
-  background:
-    radial-gradient(circle at top, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0) 34%),
-    linear-gradient(180deg, #fff4e4 0%, #fff0dc 100%);
+  background: #fff4e6;
 }
 
 .notFoundScreen {
@@ -17,7 +14,7 @@
   min-height: 100svh;
   padding: 2.5rem 1.5rem;
   color: #20150f;
-  background: linear-gradient(180deg, #fff4e4 0%, #fff0dc 100%);
+  background: #fff4e6;
 }
 
 .notFoundCard {
@@ -47,57 +44,41 @@
   pointer-events: none;
 }
 
-.clapBurstLayer {
+.confettiLayer {
   position: absolute;
   inset: 0;
-  z-index: 18;
+  z-index: 16;
+  overflow: hidden;
   pointer-events: none;
 }
 
-.clapBurstItem {
+.confettiPiece {
   position: absolute;
-  bottom: -1.6rem;
-  width: 4.9rem;
+  bottom: -0.9rem;
+  left: var(--confetti-left);
+  display: block;
+  width: var(--confetti-width);
+  height: var(--confetti-height);
+  background: var(--confetti-color);
+  border-radius: 0.22rem;
+  box-shadow: 0 0.18rem 0.45rem rgba(80, 49, 23, 0.12);
   opacity: 0;
 }
 
-.clapBurstItem1 {
-  left: -0.4rem;
+.confettiPiece:nth-child(3n) {
+  border-radius: 999px;
 }
 
-.clapBurstItem2 {
-  bottom: -1.3rem;
-  left: 12%;
-}
-
-.clapBurstItem3 {
-  bottom: -1.75rem;
-  left: 28%;
-}
-
-.clapBurstItem4 {
-  bottom: -1.15rem;
-  left: 48%;
-}
-
-.clapBurstItem5 {
-  bottom: -1.85rem;
-  left: 68%;
-}
-
-.clapBurstImage {
-  display: block;
-  width: 100%;
-  height: auto;
-  user-select: none;
+.confettiPiece:nth-child(4n) {
+  transform-origin: 50% 80%;
 }
 
 .thinkmanWrap {
   position: absolute;
-  right: -1.2rem;
+  right: -4rem;
   bottom: 0;
-  width: clamp(14rem, 56vw, 21rem);
-  height: clamp(14rem, 56vw, 21rem);
+  width: clamp(20rem, 56vw, 30rem);
+  height: clamp(20rem, 56vw, 30rem);
 }
 
 .thinkmanImage {
@@ -110,33 +91,28 @@
 
 .bubbleTail {
   position: absolute;
-  right: 10rem;
-  bottom: 10rem;
-  width: 1rem;
-  height: 1rem;
-  background: #fff;
-  border: 1px solid #9a6e3e;
-  border-radius: 5px;
-  box-shadow: 0 10px 24px rgba(66, 41, 21, 0.12);
+  right: 14.5rem;
+  bottom: 11.5rem;
+  width: 2rem;
+  height: 2rem;
+  border: 1px solid #5b5b5b;
+  border-radius: 999px;
   opacity: 0;
   transform: rotate(45deg);
 }
 
 .bubbleButton {
   position: absolute;
-  right: 10.8rem;
-  bottom: 10.6rem;
+  right: 15rem;
+  bottom: 6rem;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 4rem;
-  height: 4rem;
-  color: #2a2017;
+  width: 6rem;
+  height: 6rem;
   pointer-events: auto;
-  background: #fff;
-  border: 1px solid #9a6e3e;
   border-radius: 999px;
-  box-shadow: 0 16px 32px rgba(66, 41, 21, 0.16);
+  border: 1px solid #5b5b5b;
   opacity: 0;
   transform: scale(0.2);
 }
@@ -147,7 +123,7 @@
 
 .bubbleIcon {
   display: block;
-  font-size: 2rem;
+  font-size: 4rem;
   line-height: 1;
 }
 
@@ -155,8 +131,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 2.35rem;
-  height: 2.35rem;
+  width: 4rem;
+  height: 4rem;
   line-height: 1;
 }
 
@@ -202,7 +178,7 @@
   display: flex;
   flex-direction: column;
   height: 100svh;
-  padding: 2rem 4.25rem 1.5rem 1.5rem;
+  padding: 2rem 3.75rem 1.5rem 1.5rem;
   overflow: hidden;
   scroll-snap-align: start;
   scroll-snap-stop: always;
@@ -211,7 +187,7 @@
 .paper {
   display: flex;
   flex-direction: column;
-  width: min(22.75rem, calc(100vw - 5.25rem));
+  width: min(24.75rem, calc(100vw - 4.5rem));
   height: 100%;
 }
 
@@ -258,7 +234,7 @@
   background: #fff9f1;
   border: 1.5px solid #d79a45;
   border-radius: 999px;
-  box-shadow: 0 6px 14px rgba(121, 77, 37, 0.08);
+  box-shadow: 0 6px 14px rgba(121, 78, 37, 0);
   transition:
     transform 140ms ease,
     box-shadow 140ms ease,
@@ -290,7 +266,7 @@
 }
 
 .rawText {
-  max-width: 23ch;
+  max-width: 29ch;
   font-size: 14px;
   font-weight: 500;
   line-height: 1.62;
@@ -299,7 +275,7 @@
 }
 
 .displayText {
-  max-width: 17.75ch;
+  max-width: 23ch;
   margin-top: 0.375rem;
   font-size: 20px;
   font-weight: 900;
@@ -350,10 +326,6 @@
 }
 
 @media (min-width: 640px) {
-  .clapBurstItem {
-    width: 5.4rem;
-  }
-
   .decorationRail {
     width: 18rem;
   }

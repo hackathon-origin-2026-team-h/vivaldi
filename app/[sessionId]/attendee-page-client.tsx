@@ -7,8 +7,9 @@ import {
   createIncomingSegment,
   type DisplaySegment,
   ENDED_LABEL_RESERVED_HEIGHT,
-  fetchClarified,
+  fetchFeedback,
   fetchPersonalized,
+  fetchPersonalizedResult,
   getDisplayedSegmentText,
   loadPersona,
   MIN_SWIPE_DELTA,
@@ -17,6 +18,7 @@ import {
   PAGE_BREAK_BUFFER,
   PAGE_TOP_PADDING,
   type SessionStatus,
+  savePersona,
   THINKMAN_HEAD_CLEARANCE,
   type TranscriptPage,
   type TranscriptPageDraft,
@@ -96,33 +98,63 @@ export default function AttendeePageClient({ sessionId }: AttendeePageClientProp
 
   const clarifySegment = useEffectEvent((segmentId: number) => {
     const targetSegment = segments.find((segment) => segment.id === segmentId);
-    if (!targetSegment || targetSegment.isClarifying) {
+    if (!targetSegment || targetSegment.isFeedbackPending || targetSegment.isRepersonalizing) {
       return;
     }
 
     triggerQuestionBubble();
 
-    if (targetSegment.clarifiedText) {
+    if (targetSegment.feedbackDone) {
       return;
     }
 
-    const baseText = getDisplayedSegmentText(targetSegment);
+    const feedbackText = getDisplayedSegmentText(targetSegment);
     const currentPersona = personaRef.current;
 
     setSegments((current) =>
       updateSegmentInList(current, segmentId, (segment) => ({
         ...segment,
-        isClarifying: true,
+        isFeedbackPending: true,
+        feedbackError: false,
       })),
     );
 
-    void fetchClarified(baseText, currentPersona).then((clarifiedText) => {
+    void fetchFeedback(feedbackText, currentPersona).then((feedbackResult) => {
+      if (!feedbackResult) {
+        setSegments((current) =>
+          updateSegmentInList(current, segmentId, (segment) => ({
+            ...segment,
+            isFeedbackPending: false,
+            feedbackError: true,
+          })),
+        );
+        return;
+      }
+
+      personaRef.current = feedbackResult.updatedPersona;
+      savePersona(feedbackResult.updatedPersona);
+
       setSegments((current) =>
         updateSegmentInList(current, segmentId, (segment) => ({
           ...segment,
-          clarifiedText,
-          isClarifying: false,
+          isFeedbackPending: false,
+          feedbackDone: true,
+          feedbackError: false,
+          feedbackInference: feedbackResult.inference,
+          isRepersonalizing: true,
         })),
+      );
+
+      void fetchPersonalizedResult(targetSegment.polishedText, feedbackResult.updatedPersona).then(
+        ({ failed, text: clarifiedText }) => {
+          setSegments((current) =>
+            updateSegmentInList(current, segmentId, (segment) => ({
+              ...segment,
+              clarifiedText: failed ? segment.clarifiedText : clarifiedText,
+              isRepersonalizing: false,
+            })),
+          );
+        },
       );
     });
   });
@@ -149,11 +181,20 @@ export default function AttendeePageClient({ sessionId }: AttendeePageClientProp
     const incomingPageBody = getPageBody(trackNode, boundedPageIndex);
 
     if (!incomingPageBody || (direction !== "backward" && !outgoingPageBody)) {
+      const nextRenderWindow = getRenderWindow(boundedPageIndex, transcriptPages.length);
+
       syncActivePage({
         activePageIndexRef,
         pageIndex: boundedPageIndex,
         setActivePageIndex,
       });
+
+      gsap.set(trackNode, {
+        y: getTrackOffset(boundedPageIndex - nextRenderWindow.start, viewportHeight),
+      });
+      clearPageBodyAnimations(trackNode);
+      isTransitioningRef.current = false;
+      transitionTimelineRef.current = null;
       return;
     }
 
@@ -680,6 +721,11 @@ function normalizeTranscriptPages({
       displayText: chunk.displayText,
       isClarified: chunk.isClarified,
       showFeedbackButtons: chunk.showFeedbackButtons,
+      isFeedbackPending: chunk.isFeedbackPending,
+      feedbackDone: chunk.feedbackDone,
+      feedbackError: chunk.feedbackError,
+      feedbackInference: chunk.feedbackInference,
+      isRepersonalizing: chunk.isRepersonalizing,
     })),
   }));
 }
