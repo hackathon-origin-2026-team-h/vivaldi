@@ -1,7 +1,8 @@
 "use client";
 
 import { DeepgramClient } from "@deepgram/sdk";
-import { useCallback, useRef, useState } from "react";
+import QRCode from "qrcode";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 type Status = "idle" | "connecting" | "recording";
 
@@ -37,18 +38,66 @@ async function fetchPolished(text: string): Promise<string> {
   }
 }
 
+async function patchSessionStatus(sessionId: string, status: "DURING" | "AFTER"): Promise<void> {
+  try {
+    await fetch(`/api/sessions/${sessionId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status }),
+    });
+  } catch (err) {
+    console.error("Failed to update session status:", err);
+  }
+}
+
+async function postSegment(sessionId: string, rawText: string, polishedText: string): Promise<void> {
+  try {
+    await fetch(`/api/sessions/${sessionId}/segments`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rawText, polishedText }),
+    });
+  } catch (err) {
+    console.error("Failed to post segment:", err);
+  }
+}
+
 export default function SpeakerPage() {
   const [status, setStatus] = useState<Status>("idle");
   const [segments, setSegments] = useState<TranscriptSegment[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+  const [audienceUrl, setAudienceUrl] = useState<string | null>(null);
 
   const streamRef = useRef<MediaStream | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
   const socketRef = useRef<{ sendMedia: (d: ArrayBufferLike) => void; close: () => void } | null>(null);
   const idCounterRef = useRef(0);
+  const sessionIdRef = useRef<string | null>(null);
 
-  const stopRecording = useCallback(() => {
+  // Create session on mount
+  useEffect(() => {
+    void fetch("/api/sessions", { method: "POST" })
+      .then((res) => res.json())
+      .then(async (body: { id: string }) => {
+        const id = body.id;
+        setSessionId(id);
+        sessionIdRef.current = id;
+
+        const url = `${window.location.origin}/${id}`;
+        setAudienceUrl(url);
+
+        const dataUrl = await QRCode.toDataURL(url, { width: 256, margin: 2 });
+        setQrDataUrl(dataUrl);
+      })
+      .catch((err) => {
+        console.error("Failed to create session:", err);
+      });
+  }, []);
+
+  const stopRecording = useCallback(async () => {
     processorRef.current?.disconnect();
     processorRef.current = null;
     void audioCtxRef.current?.close();
@@ -58,6 +107,10 @@ export default function SpeakerPage() {
     socketRef.current?.close();
     socketRef.current = null;
     setStatus("idle");
+
+    if (sessionIdRef.current) {
+      await patchSessionStatus(sessionIdRef.current, "AFTER");
+    }
   }, []);
 
   const startRecording = useCallback(async () => {
@@ -95,6 +148,10 @@ export default function SpeakerPage() {
         try {
           setStatus("recording");
 
+          if (sessionIdRef.current) {
+            void patchSessionStatus(sessionIdRef.current, "DURING");
+          }
+
           const audioCtx = new AudioContext({ sampleRate: 16000 });
           audioCtxRef.current = audioCtx;
           const source = audioCtx.createMediaStreamSource(stream);
@@ -115,7 +172,7 @@ export default function SpeakerPage() {
         } catch (error) {
           console.error("Failed to initialize audio processing after socket open:", error);
           setError(error instanceof Error ? error.message : "An error occurred while initializing audio recording.");
-          stopRecording();
+          void stopRecording();
         }
       });
 
@@ -142,17 +199,19 @@ export default function SpeakerPage() {
           if (lastInterimIdx !== -1) {
             const next = [...prev];
             next[lastInterimIdx] = { ...next[lastInterimIdx], text: transcript, isFinal: true };
-            // Polish in the background
             const targetId = next[lastInterimIdx].id;
+            const sid = sessionIdRef.current;
             void fetchPolished(transcript).then((polished) => {
               setSegments((s) => s.map((seg) => (seg.id === targetId ? { ...seg, polished } : seg)));
+              if (sid) void postSegment(sid, transcript, polished);
             });
             return next;
           }
 
-          // Polish in the background
+          const sid = sessionIdRef.current;
           void fetchPolished(transcript).then((polished) => {
             setSegments((s) => s.map((seg) => (seg.id === newId ? { ...seg, polished } : seg)));
+            if (sid) void postSegment(sid, transcript, polished);
           });
           return [...prev, { id: newId, text: transcript, isFinal: true }];
         });
@@ -160,7 +219,7 @@ export default function SpeakerPage() {
 
       socket.on("error", (err) => {
         setError(`接続エラー: ${err.message}`);
-        stopRecording();
+        void stopRecording();
       });
 
       socket.on("close", () => {
@@ -170,7 +229,7 @@ export default function SpeakerPage() {
       socket.connect();
     } catch (err) {
       setError(err instanceof Error ? err.message : "不明なエラーが発生しました");
-      stopRecording();
+      void stopRecording();
     }
   }, [stopRecording]);
 
@@ -183,16 +242,34 @@ export default function SpeakerPage() {
         <h1 className="text-2xl font-bold text-gray-900 mb-1">音声書き起こし</h1>
         <p className="text-sm text-gray-500 mb-8">マイクからの音声をリアルタイムで文字起こしします</p>
 
+        {/* Audience QR code */}
+        {sessionId && (
+          <div className="mb-6 bg-white rounded-xl border border-gray-200 p-6 flex flex-col sm:flex-row items-center gap-6">
+            {qrDataUrl ? (
+              <img src={qrDataUrl} alt="QR code for audience" width={128} height={128} className="shrink-0" />
+            ) : (
+              <div className="w-32 h-32 shrink-0 bg-gray-100 rounded flex items-center justify-center text-gray-400 text-xs">
+                生成中…
+              </div>
+            )}
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-gray-700 mb-1">聴講者URL</p>
+              {audienceUrl && <p className="text-xs text-gray-500 break-all font-mono">{audienceUrl}</p>}
+              <p className="text-xs text-gray-400 mt-2">このQRコードを聴講者にスキャンしてもらってください</p>
+            </div>
+          </div>
+        )}
+
         <div className="flex items-center gap-4 mb-6">
           <button
             type="button"
-            onClick={isRecording ? stopRecording : () => void startRecording()}
-            disabled={isConnecting}
+            onClick={isRecording ? () => void stopRecording() : () => void startRecording()}
+            disabled={isConnecting || !sessionId}
             className={[
               "px-6 py-2.5 rounded-lg font-semibold text-white text-sm transition-colors",
               isRecording
                 ? "bg-red-500 hover:bg-red-600"
-                : isConnecting
+                : isConnecting || !sessionId
                   ? "bg-gray-400 cursor-not-allowed"
                   : "bg-blue-500 hover:bg-blue-600",
             ].join(" ")}

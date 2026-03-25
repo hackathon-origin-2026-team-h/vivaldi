@@ -1,6 +1,16 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+export async function GET(_req: Request, { params }: { params: { id: string } }) {
+  const session = await prisma.talkSession.findUnique({
+    where: { id: params.id },
+  });
+  if (!session) {
+    return NextResponse.json({ error: "Session not found" }, { status: 404 });
+  }
+  return NextResponse.json({ id: session.id, status: session.status });
+}
+
 const VALID_STATUSES = ["DURING", "AFTER"] as const;
 type ValidStatus = (typeof VALID_STATUSES)[number];
 
