@@ -1,4 +1,5 @@
 import { Kosugi_Maru } from "next/font/google";
+import Image from "next/image";
 import Link from "next/link";
 
 const kosugiMaru = Kosugi_Maru({
@@ -10,107 +11,105 @@ const kosugiMaru = Kosugi_Maru({
 export default function Home() {
   return (
     <main
-      className={`${kosugiMaru.className} min-h-screen bg-gradient-to-b from-slate-50 to-white flex flex-col items-center justify-center px-6 py-16`}
+      className={`${kosugiMaru.className} min-h-screen flex flex-col items-center px-5 py-12`}
+      style={{ backgroundColor: "#FFF4E5" }}
     >
-      <div className="max-w-2xl w-full mx-auto flex flex-col items-center gap-12">
-        {/* Hero */}
-        <div className="text-center flex flex-col items-center gap-4">
-          <div className="flex items-center justify-center w-16 h-16 rounded-2xl bg-blue-600 shadow-lg mb-2">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 24 24"
-              fill="white"
-              className="w-8 h-8"
-              aria-hidden="true"
-            >
-              <title>マイク</title>
-              <path d="M12 1a4 4 0 0 1 4 4v6a4 4 0 0 1-8 0V5a4 4 0 0 1 4-4Z" />
-              <path d="M19 10a1 1 0 1 0-2 0 5 5 0 0 1-10 0 1 1 0 1 0-2 0 7 7 0 0 0 6 6.93V19H9a1 1 0 1 0 0 2h6a1 1 0 1 0 0-2h-2v-2.07A7 7 0 0 0 19 10Z" />
-            </svg>
-          </div>
-          <h1 className="text-4xl font-bold text-slate-900 tracking-tight">fumumu</h1>
-          <p className="text-lg text-slate-500 max-w-md leading-relaxed">
-            音声をリアルタイムで文字に起こし、専門用語を即座に分かりやすく翻訳します。
+      <div className="max-w-lg w-full mx-auto flex flex-col items-center gap-10">
+        {/* ── App Icon ── */}
+        <div className="relative mt-4">
+          <div className="absolute -inset-3 rounded-full opacity-20 blur-xl" style={{ backgroundColor: "#E98527" }} />
+          <Image
+            src="/fumumu-icon.png"
+            alt="fumumu アプリアイコン"
+            width={140}
+            height={140}
+            className="relative rounded-full"
+            priority
+          />
+        </div>
+
+        {/* ── Title ── */}
+        <div className="text-center flex flex-col items-center gap-3">
+          <h1 className="text-5xl font-bold" style={{ color: "#E98527", letterSpacing: "0.25em" }}>
+            fumumu
+          </h1>
+          <p className="text-sm mt-1 tracking-wide" style={{ color: "#C06A10" }}>
+            ふむふむ...から「わかった！」へ
+          </p>
+          <p className="text-base text-stone-600 max-w-sm leading-relaxed mt-2">
+            話している言葉をリアルタイムで文字にして、 むずかしい専門用語もやさしく伝えます。
           </p>
         </div>
 
-        {/* Feature cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 w-full">
-          <div className="bg-white rounded-2xl border border-slate-200 p-5 flex flex-col gap-2 shadow-sm">
-            <div className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="#2563eb"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="w-5 h-5"
-                aria-hidden="true"
+        {/* ── How it works (vertical steps) ── */}
+        <div className="w-full flex flex-col gap-0">
+          {/* Step 1 */}
+          <div className="flex items-start gap-4">
+            <div className="flex flex-col items-center">
+              <div
+                className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-bold shadow-md"
+                style={{ backgroundColor: "#E98527" }}
               >
-                <title>リアルタイム</title>
-                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-              </svg>
+                1
+              </div>
+              <div className="w-0.5 h-10" style={{ backgroundColor: "#E9852766" }} />
             </div>
-            <p className="text-sm font-semibold text-slate-800">リアルタイム配信</p>
-            <p className="text-xs text-slate-500 leading-relaxed">話した言葉が即座に参加者の画面へ届きます。</p>
+            <div className="pt-1.5">
+              <p className="font-bold text-stone-800 text-sm">押す</p>
+              <p className="text-xs text-stone-500 mt-0.5 leading-relaxed">
+                ボタンひとつで参加者用のQRコードが生成されます。
+              </p>
+            </div>
           </div>
-          <div className="bg-white rounded-2xl border border-slate-200 p-5 flex flex-col gap-2 shadow-sm">
-            <div className="w-9 h-9 rounded-xl bg-violet-50 flex items-center justify-center">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="#7c3aed"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="w-5 h-5"
-                aria-hidden="true"
+
+          {/* Step 2 */}
+          <div className="flex items-start gap-4">
+            <div className="flex flex-col items-center">
+              <div
+                className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-bold shadow-md"
+                style={{ backgroundColor: "#E98527" }}
               >
-                <title>分かりやすく翻訳</title>
-                <path d="M12 20h9" />
-                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
-              </svg>
+                2
+              </div>
+              <div className="w-0.5 h-10" style={{ backgroundColor: "#E9852766" }} />
             </div>
-            <p className="text-sm font-semibold text-slate-800">分かりやすく翻訳</p>
-            <p className="text-xs text-slate-500 leading-relaxed">
-              専門用語を含む文章を、分かりやすく参加者に伝えます。
-            </p>
+            <div className="pt-1.5">
+              <p className="font-bold text-stone-800 text-sm">話す</p>
+              <p className="text-xs text-stone-500 mt-0.5 leading-relaxed">
+                発表を開始すると、音声がリアルタイムで文字なります。
+              </p>
+            </div>
           </div>
-          <div className="bg-white rounded-2xl border border-slate-200 p-5 flex flex-col gap-2 shadow-sm">
-            <div className="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="#059669"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="w-5 h-5"
-                aria-hidden="true"
+
+          {/* Step 3 */}
+          <div className="flex items-start gap-4">
+            <div className="flex flex-col items-center">
+              <div
+                className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-bold shadow-md"
+                style={{ backgroundColor: "#E98527" }}
               >
-                <title>QRコード</title>
-                <rect x="3" y="3" width="7" height="7" />
-                <rect x="14" y="3" width="7" height="7" />
-                <rect x="14" y="14" width="7" height="7" />
-                <rect x="3" y="14" width="7" height="7" />
-              </svg>
+                3
+              </div>
             </div>
-            <p className="text-sm font-semibold text-slate-800">QRコードで共有</p>
-            <p className="text-xs text-slate-500 leading-relaxed">QRコードをスキャンするだけで参加できます。</p>
+            <div className="pt-1.5">
+              <p className="font-bold text-stone-800 text-sm">わかる！</p>
+              <p className="text-xs text-stone-500 mt-0.5 leading-relaxed">
+                難しい文章がわかりやすくなって参加者に届きます。
+              </p>
+            </div>
           </div>
         </div>
 
-        {/* Notice */}
-        <div className="w-full bg-amber-50 border border-amber-200 rounded-xl px-5 py-4 flex gap-3 items-start">
+        {/* ── Notice ── */}
+        <div
+          className="w-full rounded-2xl px-5 py-4 flex gap-3 items-start"
+          style={{ backgroundColor: "#FFECD2", borderColor: "#E9852733" }}
+        >
           <svg
             xmlns="http://www.w3.org/2000/svg"
             viewBox="0 0 24 24"
             fill="none"
-            stroke="#d97706"
+            stroke="#E98527"
             strokeWidth="2"
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -122,37 +121,42 @@ export default function Home() {
             <line x1="12" y1="8" x2="12" y2="12" />
             <line x1="12" y1="16" x2="12.01" y2="16" />
           </svg>
-          <p className="text-sm text-amber-800 leading-relaxed">
-            <span className="font-semibold">ご注意：</span>
-            録音中に書き起こされた文章は、QRコードを通じて参加者に公開されます。
-            発言内容が参加者のデバイスにリアルタイムで表示されますので、あらかじめご了承ください。
+          <p className="text-xs leading-relaxed" style={{ color: "#8B5A1B" }}>
+            <span className="font-bold">おしらせ：</span>
+            音声から書き起こされた文章は、QRコードを読み取った参加者に公開されます。
+            発言内容がリアルタイムで表示されますので、あらかじめご了承ください。
           </p>
         </div>
 
-        {/* CTA */}
+        {/* ── CTA Button ── */}
         <Link
           href="/speaker"
-          className="inline-flex items-center gap-3 px-8 py-4 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-base font-semibold rounded-2xl shadow-md transition-colors"
+          className="w-full flex items-center justify-center gap-3 px-8 py-4 text-white text-base font-bold rounded-full shadow-lg transition-all hover:shadow-xl hover:scale-[1.02] active:scale-[0.98]"
+          style={{ backgroundColor: "#E98527" }}
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
             viewBox="0 0 24 24"
             fill="none"
             stroke="white"
-            strokeWidth="2"
+            strokeWidth="2.5"
             strokeLinecap="round"
             strokeLinejoin="round"
             className="w-5 h-5"
             aria-hidden="true"
           >
             <title>QRコード作成</title>
-            <rect x="3" y="3" width="7" height="7" />
-            <rect x="14" y="3" width="7" height="7" />
-            <rect x="14" y="14" width="7" height="7" />
-            <rect x="3" y="14" width="7" height="7" />
+            <rect x="3" y="3" width="7" height="7" rx="1" />
+            <rect x="14" y="3" width="7" height="7" rx="1" />
+            <rect x="3" y="14" width="7" height="7" rx="1" />
+            <path d="M14 14h3v3h-3z" />
+            <path d="M21 14v7h-7" />
           </svg>
           QRコードを作成する
         </Link>
+
+        {/* ── Footer ── */}
+        <p className="text-xs text-stone-400 text-center pb-4">fumumu — ふむふむから、わかったへ。</p>
       </div>
     </main>
   );

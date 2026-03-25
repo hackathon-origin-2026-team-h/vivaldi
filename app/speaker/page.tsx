@@ -69,6 +69,15 @@ async function postSegment(sessionId: string, rawText: string, polishedText: str
   }
 }
 
+// AudioContext with createScriptProcessor support
+interface AudioContextWithScriptProcessor extends AudioContext {
+  createScriptProcessor(
+    bufferSize: number,
+    numberOfInputChannels: number,
+    numberOfOutputChannels: number,
+  ): ScriptProcessorNode;
+}
+
 export default function SpeakerPage() {
   const [status, setStatus] = useState<Status>("idle");
   const [segments, setSegments] = useState<TranscriptSegment[]>([]);
@@ -147,8 +156,6 @@ export default function SpeakerPage() {
 
       const client = new DeepgramClient({ apiKey: token });
 
-      // Authorization in args is required by the auto-generated type but is not used at
-      // runtime by the wrapped client—auth comes from the apiKey above.
       const socket = await client.listen.v1.connect({
         model: "nova-3",
         language: "ja",
@@ -173,10 +180,7 @@ export default function SpeakerPage() {
           const audioCtx = new AudioContext({ sampleRate: 16000 });
           audioCtxRef.current = audioCtx;
           const source = audioCtx.createMediaStreamSource(stream);
-          // ScriptProcessorNode is deprecated but broadly supported; AudioWorklet requires
-          // a separate worker file which adds complexity for this use case.
-          // biome-ignore lint/suspicious/noExplicitAny: ScriptProcessor type lacks createScriptProcessor signature in some lib versions
-          const processor = (audioCtx as unknown as any).createScriptProcessor(4096, 1, 1) as ScriptProcessorNode;
+          const processor = (audioCtx as AudioContextWithScriptProcessor).createScriptProcessor(4096, 1, 1);
           processorRef.current = processor;
 
           processor.onaudioprocess = (e: AudioProcessingEvent) => {
@@ -274,23 +278,36 @@ export default function SpeakerPage() {
 
   return (
     <main
-      className={`${kosugiMaru.className} min-h-screen bg-slate-50 flex flex-col items-center justify-center px-6 py-12`}
+      className={`${kosugiMaru.className} min-h-screen flex flex-col items-center px-5 py-10`}
+      style={{ backgroundColor: "#FFF4E5" }}
     >
-      <div className="max-w-sm w-full mx-auto flex flex-col items-center gap-8">
-        {/* Header */}
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-slate-900">発表者コントロール</h1>
-          <p className="text-sm text-slate-500 mt-1">QRコードを参加者に共有して発表を開始してください</p>
+      <div className="max-w-sm w-full mx-auto flex flex-col items-center gap-7">
+        {/* ── Header with icon ── */}
+        <div className="flex flex-col items-center gap-3">
+          <h1 className="text-xl font-bold" style={{ color: "#E98527", letterSpacing: "0.2em" }}>
+            発表者コントロール
+          </h1>
+          <p className="text-xs text-stone-500 text-center">QRコードを参加者に共有して、発表を開始しましょう</p>
         </div>
 
-        {/* QR Code card */}
-        <div className="w-full bg-white rounded-2xl border border-slate-200 shadow-sm p-6 flex flex-col items-center gap-4">
+        {/* ── QR Code card ── */}
+        <div
+          className="w-full rounded-2xl p-6 flex flex-col items-center gap-4 shadow-sm"
+          style={{ backgroundColor: "#FFFFFF", border: "1px solid #F0D9B5" }}
+        >
+          <p className="text-xs font-bold tracking-wide" style={{ color: "#E98527" }}>
+            参加者用 QR コード
+          </p>
+
           {qrDataUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={qrDataUrl} alt="参加者用QRコード" width={200} height={200} className="rounded-xl" />
+            <img src={qrDataUrl} alt="参加者用QRコード" width={180} height={180} className="rounded-xl" />
           ) : (
-            <div className="w-[200px] h-[200px] rounded-xl bg-slate-100 flex items-center justify-center">
-              <span className="text-slate-400 text-sm">生成中…</span>
+            <div
+              className="w-[180px] h-[180px] rounded-xl flex items-center justify-center"
+              style={{ backgroundColor: "#FFF4E5" }}
+            >
+              <span className="text-stone-400 text-sm">生成中…</span>
             </div>
           )}
 
@@ -300,13 +317,20 @@ export default function SpeakerPage() {
             onClick={() => void handleCopyUrl()}
             disabled={!audienceUrl}
             className={[
-              "flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-colors",
+              "flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-bold transition-all",
               audienceUrl
                 ? copied
-                  ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                  : "bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200"
-                : "bg-slate-50 text-slate-400 border border-slate-200 cursor-not-allowed",
+                  ? "text-white shadow-md"
+                  : "text-white shadow-md hover:shadow-lg hover:scale-[1.02] active:scale-[0.98]"
+                : "text-stone-400 cursor-not-allowed",
             ].join(" ")}
+            style={
+              audienceUrl
+                ? copied
+                  ? { backgroundColor: "#4ade80" }
+                  : { backgroundColor: "#E98527" }
+                : { backgroundColor: "#E8DCC8" }
+            }
           >
             {copied ? (
               <>
@@ -315,7 +339,7 @@ export default function SpeakerPage() {
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
-                  strokeWidth="2"
+                  strokeWidth="2.5"
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   className="w-4 h-4"
@@ -348,48 +372,54 @@ export default function SpeakerPage() {
             )}
           </button>
 
-          <p className="text-xs text-slate-400 text-center leading-relaxed">
-            書き起こされた文章はQRコードのリンク先で参加者に公開されます
+          <p className="text-xs text-stone-400 text-center leading-relaxed">
+            書き起こされた文章はこのリンク先で参加者に公開されます
           </p>
         </div>
 
-        {/* Status indicator */}
+        {/* ── Status indicator ── */}
         <div
-          className={[
-            "w-full rounded-2xl border px-5 py-4 flex items-center gap-4 transition-colors",
+          className="w-full rounded-2xl px-5 py-4 flex items-center gap-4 transition-colors"
+          style={
             isRecording
-              ? "bg-red-50 border-red-200"
+              ? { backgroundColor: "#FEE2E2", border: "1px solid #FECACA" }
               : isConnecting
-                ? "bg-amber-50 border-amber-200"
-                : "bg-white border-slate-200",
-          ].join(" ")}
+                ? { backgroundColor: "#FFECD2", border: "1px solid #F0D9B5" }
+                : { backgroundColor: "#FFFFFF", border: "1px solid #F0D9B5" }
+          }
         >
           {/* Animated dot */}
           <div className="relative flex items-center justify-center w-10 h-10 shrink-0">
             {isRecording && (
               <span className="absolute inline-flex w-full h-full rounded-full bg-red-400 opacity-50 animate-ping" />
             )}
+            {isConnecting && (
+              <span
+                className="absolute inline-flex w-full h-full rounded-full opacity-40 animate-pulse"
+                style={{ backgroundColor: "#E98527" }}
+              />
+            )}
             <span
-              className={[
-                "relative inline-flex w-5 h-5 rounded-full",
-                isRecording ? "bg-red-500" : isConnecting ? "bg-amber-400" : "bg-slate-300",
-              ].join(" ")}
+              className="relative inline-flex w-5 h-5 rounded-full"
+              style={
+                isRecording
+                  ? { backgroundColor: "#EF4444" }
+                  : isConnecting
+                    ? { backgroundColor: "#E98527" }
+                    : { backgroundColor: "#D6CFC4" }
+              }
             />
           </div>
           <div>
             <p
-              className={[
-                "text-sm font-semibold",
-                isRecording ? "text-red-700" : isConnecting ? "text-amber-700" : "text-slate-600",
-              ].join(" ")}
+              className="text-sm font-bold"
+              style={isRecording ? { color: "#B91C1C" } : isConnecting ? { color: "#C06A10" } : { color: "#78716C" }}
             >
               {isRecording ? "発表中" : isConnecting ? "接続中…" : "待機中"}
             </p>
             <p
-              className={[
-                "text-xs mt-0.5",
-                isRecording ? "text-red-500" : isConnecting ? "text-amber-500" : "text-slate-400",
-              ].join(" ")}
+              className="text-xs mt-0.5"
+              style={isRecording ? { color: "#DC2626" } : isConnecting ? { color: "#E98527" } : { color: "#A8A29E" }}
             >
               {isRecording
                 ? "音声をリアルタイムで書き起こしています"
@@ -400,32 +430,47 @@ export default function SpeakerPage() {
           </div>
         </div>
 
-        {/* Error */}
+        {/* ── Error ── */}
         {error !== null && (
-          <div className="w-full p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm">{error}</div>
+          <div
+            className="w-full p-4 rounded-2xl text-sm"
+            style={{ backgroundColor: "#FEE2E2", border: "1px solid #FECACA", color: "#B91C1C" }}
+          >
+            {error}
+          </div>
         )}
 
-        {/* Start / Stop button */}
+        {/* ── Start / Stop button ── */}
         <button
           type="button"
           onClick={isRecording ? () => void stopRecording() : () => void startRecording()}
           disabled={isConnecting || !sessionId}
           className={[
-            "w-full py-4 rounded-2xl font-bold text-base text-white transition-colors shadow-sm",
+            "w-full py-4 rounded-full font-bold text-base text-white transition-all shadow-lg",
             isRecording
-              ? "bg-red-500 hover:bg-red-600 active:bg-red-700"
+              ? "hover:shadow-xl hover:scale-[1.02] active:scale-[0.98]"
               : isConnecting || !sessionId
-                ? "bg-slate-300 cursor-not-allowed"
-                : "bg-blue-600 hover:bg-blue-700 active:bg-blue-800",
+                ? "cursor-not-allowed"
+                : "hover:shadow-xl hover:scale-[1.02] active:scale-[0.98]",
           ].join(" ")}
+          style={
+            isRecording
+              ? { backgroundColor: "#EF4444" }
+              : isConnecting || !sessionId
+                ? { backgroundColor: "#D6CFC4" }
+                : { backgroundColor: "#E98527" }
+          }
         >
           {isConnecting ? "接続中…" : isRecording ? "発表を終了する" : "発表を開始する"}
         </button>
 
-        {/* Segment count hint (no transcript text shown) */}
+        {/* ── Segment count hint ── */}
         {segments.length > 0 && isIdle && (
-          <p className="text-xs text-slate-400 text-center">{segments.length} 件の書き起こしが参加者に配信されました</p>
+          <p className="text-xs text-stone-400 text-center">{segments.length} 件の書き起こしが参加者に配信されました</p>
         )}
+
+        {/* ── Footer ── */}
+        <p className="text-xs text-stone-400 text-center pb-4">fumumu — ふむふむから、わかったへ。</p>
       </div>
     </main>
   );
