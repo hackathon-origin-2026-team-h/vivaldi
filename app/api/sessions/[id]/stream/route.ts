@@ -19,7 +19,10 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
       // Send initial session status
       controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "session", status: session.status })}\n\n`));
 
-      const interval = setInterval(async () => {
+      let aborted = false;
+
+      const poll = async () => {
+        if (aborted) return;
         try {
           const segments = await prisma.transcriptSegment.findMany({
             where: { sessionId: params.id, id: { gt: lastSegmentId } },
@@ -45,10 +48,13 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
         } catch (err) {
           console.error("SSE polling error:", err);
         }
-      }, 500);
+        if (!aborted) setTimeout(poll, 500);
+      };
+
+      setTimeout(poll, 500);
 
       req.signal.addEventListener("abort", () => {
-        clearInterval(interval);
+        aborted = true;
         controller.close();
       });
     },
