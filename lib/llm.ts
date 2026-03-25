@@ -83,8 +83,7 @@ async function translateStep(text: string): Promise<string> {
   const response = await client.messages.create({
     model: MODEL,
     max_tokens: 2048,
-    system:
-      "日本語を自然な英語に翻訳してください。テキストのみ返してください（JSON不要）。",
+    system: "日本語を自然な英語に翻訳してください。テキストのみ返してください（JSON不要）。",
     messages: [{ role: "user", content: text }],
   });
   const block = response.content.find((b) => b.type === "text");
@@ -92,10 +91,7 @@ async function translateStep(text: string): Promise<string> {
   return result !== "" ? result : text;
 }
 
-export async function runPipeline(
-  text: string,
-  steps: PipelineStep[],
-): Promise<PipelineResult> {
+export async function runPipeline(text: string, steps: PipelineStep[]): Promise<PipelineResult> {
   _lastSimplifyTerms = [];
 
   const stepResults: PipelineResult["steps"] = [];
