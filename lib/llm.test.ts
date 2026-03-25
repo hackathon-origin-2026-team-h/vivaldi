@@ -15,6 +15,14 @@ function makeStream(text: string) {
   return { finalMessage: () => Promise.resolve(message) };
 }
 
+function getPipelineStep(name: (typeof defaultPipeline)[number]["name"]) {
+  const step = defaultPipeline.find((candidate) => candidate.name === name);
+  if (!step) {
+    throw new Error(`Missing pipeline step: ${name}`);
+  }
+  return step;
+}
+
 beforeEach(() => {
   streamMock.mockReset();
   process.env.ANTHROPIC_API_KEY = "test-key";
@@ -57,7 +65,7 @@ describe("runPipeline", () => {
     });
     streamMock.mockReturnValue(makeStream(simplifyJson));
 
-    const steps = [defaultPipeline.find((s) => s.name === "simplify")!];
+    const steps = [getPipelineStep("simplify")];
     const result = await runPipeline("難しいテキスト", steps);
 
     expect(result.output).toBe("やさしい文章");
@@ -65,7 +73,7 @@ describe("runPipeline", () => {
   });
 
   it("simplify ステップが disabled の場合 terms は空配列", async () => {
-    const steps = [{ ...defaultPipeline.find((s) => s.name === "simplify")!, enabled: false }];
+    const steps = [{ ...getPipelineStep("simplify"), enabled: false }];
     const result = await runPipeline("テスト", steps);
 
     expect(result.terms).toEqual([]);
@@ -84,7 +92,7 @@ describe("removeFillers ステップ", () => {
   it("Claude のレスポンスをそのまま output にする", async () => {
     streamMock.mockReturnValue(makeStream("言い淀みを除去した文章"));
 
-    const step = defaultPipeline.find((s) => s.name === "removeFillers")!;
+    const step = getPipelineStep("removeFillers");
     const result = await runPipeline("えーと、難しいテキスト", [step]);
 
     expect(result.output).toBe("言い淀みを除去した文章");
@@ -93,7 +101,7 @@ describe("removeFillers ステップ", () => {
   it("Claude が空文字を返した場合は入力をフォールバックとして返す", async () => {
     streamMock.mockReturnValue(makeStream(""));
 
-    const step = defaultPipeline.find((s) => s.name === "removeFillers")!;
+    const step = getPipelineStep("removeFillers");
     const result = await runPipeline("入力テキスト", [step]);
 
     expect(result.output).toBe("入力テキスト");
@@ -109,7 +117,7 @@ describe("translate ステップ", () => {
   it("enabled にすると Claude のレスポンスを返す", async () => {
     streamMock.mockReturnValue(makeStream("Translated text"));
 
-    const step = { ...defaultPipeline.find((s) => s.name === "translate")!, enabled: true };
+    const step = { ...getPipelineStep("translate"), enabled: true };
     const result = await runPipeline("日本語テキスト", [step]);
 
     expect(result.output).toBe("Translated text");
@@ -121,7 +129,7 @@ describe("simplify ステップ — JSON パース", () => {
     const json = JSON.stringify({ text: "平易な文", terms: [] });
     streamMock.mockReturnValue(makeStream(`\`\`\`json\n${json}\n\`\`\``));
 
-    const step = defaultPipeline.find((s) => s.name === "simplify")!;
+    const step = getPipelineStep("simplify");
     const result = await runPipeline("テスト", [step]);
 
     expect(result.output).toBe("平易な文");
@@ -131,7 +139,7 @@ describe("simplify ステップ — JSON パース", () => {
   it("不正な JSON の場合エラーをthrowする", async () => {
     streamMock.mockReturnValue(makeStream("not json"));
 
-    const step = defaultPipeline.find((s) => s.name === "simplify")!;
+    const step = getPipelineStep("simplify");
     await expect(runPipeline("テスト", [step])).rejects.toThrow(SyntaxError);
   });
 });

@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist_Mono } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
+const kosugiMaru = localFont({
+  src: "./fonts/KosugiMaru-Regular.ttf",
+  variable: "--font-kosugi-maru",
+  display: "swap",
 });
 
 const geistMono = Geist_Mono({
