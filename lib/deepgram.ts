@@ -1,11 +1,11 @@
 import { DefaultDeepgramClient } from "@deepgram/sdk";
 
-if (!process.env.DEEPGRAM_API_KEY) {
-  throw new Error("DEEPGRAM_API_KEY is not set");
-}
-
 function createDeepgramClient() {
-  return new DefaultDeepgramClient({ apiKey: process.env.DEEPGRAM_API_KEY });
+  const apiKey = process.env.DEEPGRAM_API_KEY;
+  if (!apiKey) {
+    throw new Error("DEEPGRAM_API_KEY is not set");
+  }
+  return new DefaultDeepgramClient({ apiKey });
 }
 
 const globalForDeepgram = globalThis as unknown as { deepgram: DefaultDeepgramClient };
