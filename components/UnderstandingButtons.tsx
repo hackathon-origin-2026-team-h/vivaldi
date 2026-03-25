@@ -1,44 +1,69 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 type Reaction = "understood" | "confused" | null;
 
 type UnderstandingButtonsProps = {
-  /** Called when the user taps a reaction. Fires only once (reactions are irreversible). */
+  /** Called when the user taps a reaction. "confused" can later transition into "understood". */
   onReact?: (reaction: "understood" | "confused") => void;
+  className?: string;
+  disabled?: boolean;
+  initialReaction?: Reaction;
 };
 
 /**
  * A pair of circular reaction buttons — lightbulb (understood) and ? (confused).
  *
  * - Before pressing: both buttons are grey.
- * - After pressing one: the selected button turns accent-orange (#E98527), the other stays grey.
- * - Once pressed the choice cannot be undone.
+ * - After pressing either button: the selected button turns accent-orange.
+ * - The user can still switch to the other button later.
  */
-export default function UnderstandingButtons({ onReact }: UnderstandingButtonsProps) {
-  const [reaction, setReaction] = useState<Reaction>(null);
+export default function UnderstandingButtons({
+  className,
+  disabled = false,
+  initialReaction,
+  onReact,
+}: UnderstandingButtonsProps) {
+  const [reaction, setReaction] = useState<Reaction>(initialReaction ?? null);
+
+  useEffect(() => {
+    if (initialReaction === undefined) {
+      return;
+    }
+
+    setReaction(initialReaction);
+  }, [initialReaction]);
 
   const handleClick = (value: "understood" | "confused") => {
-    if (reaction !== null) return;
+    if (disabled) {
+      return;
+    }
+
+    if (reaction === value) {
+      return;
+    }
+
     setReaction(value);
     onReact?.(value);
   };
 
-  const isLocked = reaction !== null;
+  const canTapUnderstood = !disabled && reaction !== "understood";
+  const canTapConfused = !disabled && reaction !== "confused";
 
-  const baseClass = "flex items-center justify-center w-16 h-16 rounded-full transition-all duration-300 shadow-sm";
+  const baseClass =
+    "flex items-center justify-center w-[2.8rem] h-[2.8rem] rounded-full transition-all duration-300 shadow-sm";
 
   return (
-    <div className="flex items-center justify-center gap-5">
+    <div className={["flex items-center justify-center gap-3.5", className ?? ""].filter(Boolean).join(" ")}>
       {/* ── 理解できた (lightbulb) ── */}
       <button
         type="button"
         onClick={() => handleClick("understood")}
-        disabled={isLocked}
+        disabled={!canTapUnderstood}
         className={[
           baseClass,
-          isLocked ? "cursor-default" : "cursor-pointer active:scale-95 hover:shadow-md",
+          canTapUnderstood ? "cursor-pointer active:scale-95 hover:shadow-md" : "cursor-default",
           reaction === "understood" ? "shadow-lg" : "",
         ].join(" ")}
         style={{
@@ -56,7 +81,7 @@ export default function UnderstandingButtons({ onReact }: UnderstandingButtonsPr
           strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
-          className="w-7 h-7"
+          className="w-5 h-5"
           aria-hidden="true"
         >
           <title>電球</title>
@@ -70,10 +95,10 @@ export default function UnderstandingButtons({ onReact }: UnderstandingButtonsPr
       <button
         type="button"
         onClick={() => handleClick("confused")}
-        disabled={isLocked}
+        disabled={!canTapConfused}
         className={[
           baseClass,
-          isLocked ? "cursor-default" : "cursor-pointer active:scale-95 hover:shadow-md",
+          canTapConfused ? "cursor-pointer active:scale-95 hover:shadow-md" : "cursor-default",
           reaction === "confused" ? "shadow-lg" : "",
         ].join(" ")}
         style={{
@@ -91,7 +116,7 @@ export default function UnderstandingButtons({ onReact }: UnderstandingButtonsPr
           strokeWidth="2.2"
           strokeLinecap="round"
           strokeLinejoin="round"
-          className="w-7 h-7"
+          className="w-5 h-5"
           aria-hidden="true"
         >
           <title>はてな</title>

@@ -39,6 +39,9 @@ type SessionStreamEvent =
   | { type: "session"; status: SessionStatus }
   | { type: "segment"; id: number; polishedText: string; rawText: string };
 
+const PAGE_RENDER_WINDOW_RADIUS = 1;
+const MANUAL_NAVIGATION_LOCK_MS = 520;
+
 export default function AttendeePageClient({ sessionId }: AttendeePageClientProps) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const pagesTrackRef = useRef<HTMLDivElement>(null);
@@ -50,6 +53,8 @@ export default function AttendeePageClient({ sessionId }: AttendeePageClientProp
   const touchStartYRef = useRef<number | null>(null);
   const transitionTimelineRef = useRef<gsap.core.Timeline | null>(null);
   const isTransitioningRef = useRef(false);
+  const manualNavigationLockRef = useRef(false);
+  const manualNavigationUnlockTimerRef = useRef<number | null>(null);
   const previousPageCountRef = useRef(0);
   const pageSlotIdRef = useRef(0);
   const activePageIndexRef = useRef(0);
@@ -62,7 +67,10 @@ export default function AttendeePageClient({ sessionId }: AttendeePageClientProp
   const [segments, setSegments] = useState<DisplaySegment[]>([]);
   const [sessionStatus, setSessionStatus] = useState<SessionStatus | null>(null);
   const [transcriptPages, setTranscriptPages] = useState<TranscriptPage[]>([]);
+  const [understoodBubbleNonce, setUnderstoodBubbleNonce] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(0);
+  const renderWindow = getRenderWindow(activePageIndex, transcriptPages.length);
+  const renderedPages = transcriptPages.slice(renderWindow.start, renderWindow.endExclusive);
 
   const personalizeSegment = useEffectEvent((segmentId: number, text: string) => {
     const currentPersona = personaRef.current;
@@ -80,6 +88,10 @@ export default function AttendeePageClient({ sessionId }: AttendeePageClientProp
 
   const triggerQuestionBubble = useEffectEvent(() => {
     setQuestionBubbleNonce((current) => current + 1);
+  });
+
+  const triggerUnderstoodCelebration = useEffectEvent(() => {
+    setUnderstoodBubbleNonce((current) => current + 1);
   });
 
   const clarifySegment = useEffectEvent((segmentId: number) => {
@@ -123,6 +135,8 @@ export default function AttendeePageClient({ sessionId }: AttendeePageClientProp
 
     const boundedPageIndex = clampPageIndex(nextPageIndex, transcriptPages.length);
     const currentPageIndex = activePageIndexRef.current;
+    const currentRenderWindow = getRenderWindow(currentPageIndex, transcriptPages.length);
+    const nextRelativePageIndex = boundedPageIndex - currentRenderWindow.start;
 
     if (boundedPageIndex === currentPageIndex && direction !== "jump") {
       return;
@@ -133,6 +147,15 @@ export default function AttendeePageClient({ sessionId }: AttendeePageClientProp
 
     const outgoingPageBody = getPageBody(trackNode, currentPageIndex);
     const incomingPageBody = getPageBody(trackNode, boundedPageIndex);
+
+    if (!incomingPageBody || (direction !== "backward" && !outgoingPageBody)) {
+      syncActivePage({
+        activePageIndexRef,
+        pageIndex: boundedPageIndex,
+        setActivePageIndex,
+      });
+      return;
+    }
 
     clearPageBodyAnimations(trackNode);
 
@@ -171,7 +194,7 @@ export default function AttendeePageClient({ sessionId }: AttendeePageClientProp
       {
         duration: 0.4,
         ease: "power3.inOut",
-        y: getTrackOffset(boundedPageIndex, viewportHeight),
+        y: getTrackOffset(nextRelativePageIndex, viewportHeight),
       },
       0,
     );
@@ -222,16 +245,35 @@ export default function AttendeePageClient({ sessionId }: AttendeePageClientProp
     animateToPage(nextPageIndex, mode === "jump" ? "jump" : "forward");
   });
 
+  const lockManualNavigation = useEffectEvent(() => {
+    manualNavigationLockRef.current = true;
+
+    if (manualNavigationUnlockTimerRef.current !== null) {
+      window.clearTimeout(manualNavigationUnlockTimerRef.current);
+    }
+
+    manualNavigationUnlockTimerRef.current = window.setTimeout(() => {
+      manualNavigationLockRef.current = false;
+      manualNavigationUnlockTimerRef.current = null;
+    }, MANUAL_NAVIGATION_LOCK_MS);
+  });
+
   const handleWheelNavigation = useEffectEvent((deltaY: number) => {
+    if (manualNavigationLockRef.current) {
+      return;
+    }
+
     if (Math.abs(deltaY) < MIN_WHEEL_DELTA) {
       return;
     }
 
     if (deltaY < 0) {
+      lockManualNavigation();
       goToPreviousPage();
       return;
     }
 
+    lockManualNavigation();
     goToNextPage("manual");
   });
 
@@ -240,6 +282,11 @@ export default function AttendeePageClient({ sessionId }: AttendeePageClientProp
   });
 
   const handleTouchEnd = useEffectEvent((clientY: number) => {
+    if (manualNavigationLockRef.current) {
+      touchStartYRef.current = null;
+      return;
+    }
+
     const startY = touchStartYRef.current;
     touchStartYRef.current = null;
 
@@ -253,16 +300,26 @@ export default function AttendeePageClient({ sessionId }: AttendeePageClientProp
     }
 
     if (deltaY > 0) {
+      lockManualNavigation();
       goToPreviousPage();
       return;
     }
 
+    lockManualNavigation();
     goToNextPage("manual");
   });
 
   useEffect(() => {
     setIsMounted(true);
     personaRef.current = loadPersona();
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (manualNavigationUnlockTimerRef.current !== null) {
+        window.clearTimeout(manualNavigationUnlockTimerRef.current);
+      }
+    };
   }, []);
 
   useLayoutEffect(() => {
@@ -405,7 +462,9 @@ export default function AttendeePageClient({ sessionId }: AttendeePageClientProp
         pageIndex: nextPageIndex,
         setActivePageIndex,
       });
-      gsap.set(trackNode, { y: getTrackOffset(nextPageIndex, viewportHeight) });
+      gsap.set(trackNode, {
+        y: getTrackOffset(nextPageIndex - getRenderWindow(nextPageIndex, transcriptPages.length).start, viewportHeight),
+      });
       return;
     }
 
@@ -416,7 +475,12 @@ export default function AttendeePageClient({ sessionId }: AttendeePageClientProp
         pageIndex: boundedPageIndex,
         setActivePageIndex,
       });
-      gsap.set(trackNode, { y: getTrackOffset(boundedPageIndex, viewportHeight) });
+      gsap.set(trackNode, {
+        y: getTrackOffset(
+          boundedPageIndex - getRenderWindow(boundedPageIndex, transcriptPages.length).start,
+          viewportHeight,
+        ),
+      });
       return;
     }
 
@@ -427,8 +491,24 @@ export default function AttendeePageClient({ sessionId }: AttendeePageClientProp
       return;
     }
 
-    gsap.set(trackNode, { y: getTrackOffset(previousPageIndex, viewportHeight) });
+    gsap.set(trackNode, {
+      y: getTrackOffset(
+        previousPageIndex - getRenderWindow(previousPageIndex, transcriptPages.length).start,
+        viewportHeight,
+      ),
+    });
   }, [isMounted, transcriptPages.length, viewportHeight]);
+
+  useLayoutEffect(() => {
+    const trackNode = pagesTrackRef.current;
+    if (!trackNode || viewportHeight === 0 || isTransitioningRef.current) {
+      return;
+    }
+
+    gsap.set(trackNode, {
+      y: getTrackOffset(activePageIndex - renderWindow.start, viewportHeight),
+    });
+  }, [activePageIndex, renderWindow.start, viewportHeight]);
 
   useEffect(() => {
     if (!isMounted) {
@@ -502,15 +582,19 @@ export default function AttendeePageClient({ sessionId }: AttendeePageClientProp
       onWheelNavigate={handleWheelNavigation}
       questionBubbleNonce={questionBubbleNonce}
       showJumpToLatest={activePageIndex < transcriptPages.length - 1}
+      thumbsupBubbleNonce={understoodBubbleNonce}
       trackRef={pagesTrackRef}
       viewportRef={viewportRef}
     >
       {renderAttendeeContent({
         clarifySegment,
+        latestPageIndex: transcriptPages.length - 1,
         latestPageRef,
+        renderedPages,
+        renderWindowStart: renderWindow.start,
+        triggerUnderstoodCelebration,
         segments,
         sessionStatus,
-        transcriptPages,
       })}
     </AttendeeViewport>
   );
@@ -518,16 +602,22 @@ export default function AttendeePageClient({ sessionId }: AttendeePageClientProp
 
 function renderAttendeeContent({
   clarifySegment,
+  latestPageIndex,
   latestPageRef,
+  renderedPages,
+  renderWindowStart,
+  triggerUnderstoodCelebration,
   segments,
   sessionStatus,
-  transcriptPages,
 }: {
   clarifySegment: (segmentId: number) => void;
+  latestPageIndex: number;
   latestPageRef: RefObject<HTMLElement | null>;
+  renderedPages: TranscriptPage[];
+  renderWindowStart: number;
+  triggerUnderstoodCelebration: () => void;
   segments: DisplaySegment[];
   sessionStatus: SessionStatus | null;
-  transcriptPages: TranscriptPage[];
 }) {
   if (sessionStatus === null || sessionStatus === "BEFORE") {
     return <CenteredMessage message="発表開始までお待ちください" />;
@@ -537,16 +627,21 @@ function renderAttendeeContent({
     return <CenteredMessage message="まもなく翻訳を開始します" />;
   }
 
-  return transcriptPages.map((page, pageIndex) => (
-    <TranscriptPageSection
-      key={page.key}
-      onRequestClarify={clarifySegment}
-      page={page}
-      pageIndex={pageIndex}
-      sectionRef={pageIndex === transcriptPages.length - 1 ? latestPageRef : undefined}
-      showEndedLabel={sessionStatus === "AFTER" && pageIndex === transcriptPages.length - 1}
-    />
-  ));
+  return renderedPages.map((page, pageIndex) => {
+    const absolutePageIndex = renderWindowStart + pageIndex;
+
+    return (
+      <TranscriptPageSection
+        key={page.key}
+        onRequestClarify={clarifySegment}
+        onRequestUnderstand={triggerUnderstoodCelebration}
+        page={page}
+        pageIndex={absolutePageIndex}
+        sectionRef={absolutePageIndex === latestPageIndex ? latestPageRef : undefined}
+        showEndedLabel={sessionStatus === "AFTER" && absolutePageIndex === latestPageIndex}
+      />
+    );
+  });
 }
 
 function createMeasureChunkHeight({
@@ -628,6 +723,17 @@ function getTrackOffset(pageIndex: number, viewportHeight: number) {
 
 function clampPageIndex(pageIndex: number, pageCount: number) {
   return Math.min(Math.max(pageIndex, 0), Math.max(pageCount - 1, 0));
+}
+
+function getRenderWindow(pageIndex: number, pageCount: number) {
+  const clampedPageIndex = clampPageIndex(pageIndex, pageCount);
+  const start = Math.max(clampedPageIndex - PAGE_RENDER_WINDOW_RADIUS, 0);
+  const endExclusive = Math.min(clampedPageIndex + PAGE_RENDER_WINDOW_RADIUS + 1, pageCount);
+
+  return {
+    endExclusive,
+    start,
+  };
 }
 
 function syncActivePage({

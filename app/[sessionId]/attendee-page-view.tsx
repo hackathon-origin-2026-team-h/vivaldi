@@ -2,11 +2,12 @@
 
 import { gsap } from "gsap";
 import Image from "next/image";
-import { type ReactNode, type RefObject, useEffect, useRef, useState } from "react";
+import { type ReactNode, type RefObject, useCallback, useEffect, useRef, useState } from "react";
+import UnderstandingButtons from "@/components/UnderstandingButtons";
 import styles from "./attendee-page-client.module.css";
 import { QUESTION_BUBBLE_DURATION_MS, type TranscriptChunk, type TranscriptPage } from "./attendee-page-model";
 
-type BubbleMode = "hidden" | "jump" | "question";
+type BubbleMode = "hidden" | "jump" | "question" | "thumbsup";
 
 type AttendeeViewportProps = {
   children: ReactNode;
@@ -17,12 +18,14 @@ type AttendeeViewportProps = {
   onWheelNavigate?: (deltaY: number) => void;
   questionBubbleNonce?: number;
   showJumpToLatest?: boolean;
+  thumbsupBubbleNonce?: number;
   trackRef?: RefObject<HTMLDivElement | null>;
   viewportRef?: RefObject<HTMLDivElement | null>;
 };
 
 type TranscriptPageSectionProps = {
   onRequestClarify: (segmentId: number) => void;
+  onRequestUnderstand: () => void;
   page: TranscriptPage;
   pageIndex: number;
   sectionRef?: RefObject<HTMLElement | null>;
@@ -31,9 +34,19 @@ type TranscriptPageSectionProps = {
 
 type TranscriptFeedbackButtonsProps = {
   interactive: boolean;
+  onUnderstand?: () => void;
   onUnclear?: () => void;
+  selectedReaction?: "confused" | "understood";
   visible: boolean;
 };
+
+const CLAP_BURST_ITEM_CLASSES = [
+  styles.clapBurstItem1,
+  styles.clapBurstItem2,
+  styles.clapBurstItem3,
+  styles.clapBurstItem4,
+  styles.clapBurstItem5,
+];
 
 export function AttendeeViewport({
   children,
@@ -44,24 +57,61 @@ export function AttendeeViewport({
   onWheelNavigate,
   questionBubbleNonce = 0,
   showJumpToLatest = false,
+  thumbsupBubbleNonce = 0,
   trackRef,
   viewportRef,
 }: AttendeeViewportProps) {
   const bubbleRef = useRef<HTMLButtonElement>(null);
   const bubbleTailRef = useRef<HTMLSpanElement>(null);
-  const bubbleIconRef = useRef<HTMLSpanElement>(null);
-  const questionBubbleActive = useQuestionBubbleState(questionBubbleNonce);
-  const bubbleMode: BubbleMode = questionBubbleActive ? "question" : showJumpToLatest ? "jump" : "hidden";
+  const bubbleContentRef = useRef<HTMLSpanElement>(null);
+  const clapRefs = useRef<Array<HTMLDivElement | null>>([]);
+  const temporaryBubbleVisual = useTemporaryBubbleVisual({
+    questionBubbleNonce,
+    thumbsupBubbleNonce,
+  });
+  const bubbleMode: BubbleMode =
+    temporaryBubbleVisual === "question"
+      ? "question"
+      : temporaryBubbleVisual === "thumbsup"
+        ? "thumbsup"
+        : showJumpToLatest
+          ? "jump"
+          : "hidden";
 
   useThinkmanBubbleAnimation({
-    bubbleIconRef,
+    bubbleContentRef,
     bubbleMode,
     bubbleRef,
     bubbleTailRef,
   });
+  useClapBurstAnimation({
+    clapRefs,
+    thumbsupBubbleNonce,
+  });
 
   return (
     <main className={styles.attendeeScreen}>
+      <div aria-hidden="true" className={styles.clapBurstLayer}>
+        {CLAP_BURST_ITEM_CLASSES.map((itemClassName, index) => (
+          <div
+            key={itemClassName}
+            ref={(node) => {
+              clapRefs.current[index] = node;
+            }}
+            className={`${styles.clapBurstItem} ${itemClassName}`}
+          >
+            <Image
+              alt=""
+              className={styles.clapBurstImage}
+              draggable={false}
+              height={512}
+              src="/images/clap.png"
+              width={512}
+            />
+          </div>
+        ))}
+      </div>
+
       <div className={styles.decorationRail}>
         <div className={styles.thinkmanWrap}>
           <Image
@@ -86,8 +136,25 @@ export function AttendeeViewport({
           tabIndex={showJumpToLatest ? 0 : -1}
           type="button"
         >
-          <span ref={bubbleIconRef} aria-hidden="true" className={styles.bubbleIcon}>
-            {bubbleMode === "question" ? "❓" : "☟"}
+          <span
+            ref={bubbleContentRef}
+            aria-hidden="true"
+            className={bubbleMode === "thumbsup" ? styles.bubbleAssetWrap : styles.bubbleIcon}
+          >
+            {bubbleMode === "thumbsup" ? (
+              <Image
+                alt=""
+                className={styles.bubbleThumbsup}
+                draggable={false}
+                height={512}
+                src="/images/thumbsup.png"
+                width={512}
+              />
+            ) : bubbleMode === "question" ? (
+              "❓"
+            ) : (
+              "☟"
+            )}
           </span>
           <span className={styles.srOnly}>{showJumpToLatest ? "最新の文章へ戻る" : "Thinkmanが考えています"}</span>
         </button>
@@ -155,6 +222,7 @@ export function SegmentMeasurementLayer({
 
 export function TranscriptPageSection({
   onRequestClarify,
+  onRequestUnderstand,
   page,
   pageIndex,
   sectionRef,
@@ -166,7 +234,12 @@ export function TranscriptPageSection({
         <div className={styles.pageBody} data-page-body={pageIndex}>
           <div className={styles.chunkList}>
             {page.chunks.map((chunk) => (
-              <TranscriptBlock key={chunk.key} chunk={chunk} onRequestClarify={onRequestClarify} />
+              <TranscriptBlock
+                key={chunk.key}
+                chunk={chunk}
+                onRequestClarify={onRequestClarify}
+                onRequestUnderstand={onRequestUnderstand}
+              />
             ))}
           </div>
         </div>
@@ -188,9 +261,11 @@ export function CenteredMessage({ message }: { message: string }) {
 function TranscriptBlock({
   chunk,
   onRequestClarify,
+  onRequestUnderstand,
 }: {
   chunk: TranscriptChunk;
   onRequestClarify: (segmentId: number) => void;
+  onRequestUnderstand: () => void;
 }) {
   return (
     <article className={styles.transcriptBlock}>
@@ -200,79 +275,88 @@ function TranscriptBlock({
       </p>
       <TranscriptFeedbackButtons
         interactive
+        onUnderstand={onRequestUnderstand}
         onUnclear={() => {
           onRequestClarify(chunk.segmentId);
         }}
+        selectedReaction={chunk.isClarified ? "confused" : undefined}
         visible={chunk.showFeedbackButtons}
       />
     </article>
   );
 }
 
-function TranscriptFeedbackButtons({ interactive, onUnclear, visible }: TranscriptFeedbackButtonsProps) {
+function TranscriptFeedbackButtons({
+  interactive,
+  onUnderstand,
+  onUnclear,
+  selectedReaction,
+  visible,
+}: TranscriptFeedbackButtonsProps) {
   if (!visible) {
     return null;
   }
 
   return (
     <div className={styles.feedbackButtons}>
-      <button
-        aria-label="この翻訳文はわかった"
-        className={`${styles.feedbackButton} ${styles.feedbackButtonUnderstand}`}
-        data-feedback-kind="understood"
+      <UnderstandingButtons
         disabled={!interactive}
-        tabIndex={interactive ? 0 : -1}
-        type="button"
-      >
-        <span aria-hidden="true" className={styles.feedbackButtonSymbol}>
-          !
-        </span>
-        <span className={styles.srOnly}>わかる</span>
-      </button>
+        initialReaction={selectedReaction}
+        onReact={(reaction) => {
+          if (reaction === "understood") {
+            onUnderstand?.();
+          }
 
-      <button
-        aria-label="この翻訳文はまだわからない"
-        className={`${styles.feedbackButton} ${styles.feedbackButtonUnsure}`}
-        data-feedback-kind="unclear"
-        disabled={!interactive}
-        onClick={onUnclear}
-        tabIndex={interactive ? 0 : -1}
-        type="button"
-      >
-        <span aria-hidden="true" className={styles.feedbackButtonSymbol}>
-          ?
-        </span>
-        <span className={styles.srOnly}>わからない</span>
-      </button>
+          if (reaction === "confused") {
+            onUnclear?.();
+          }
+        }}
+      />
     </div>
   );
 }
 
-function useQuestionBubbleState(questionBubbleNonce: number) {
-  const [questionBubbleActive, setQuestionBubbleActive] = useState(false);
+function useTemporaryBubbleVisual({
+  questionBubbleNonce,
+  thumbsupBubbleNonce,
+}: {
+  questionBubbleNonce: number;
+  thumbsupBubbleNonce: number;
+}) {
+  const [visual, setVisual] = useState<"question" | "thumbsup" | null>(null);
+  const lastQuestionNonceRef = useRef(0);
+  const lastThumbsupNonceRef = useRef(0);
   const timerRef = useRef<number | null>(null);
 
-  useEffect(() => {
-    if (questionBubbleNonce === 0) {
-      return;
-    }
-
+  const startTemporaryVisual = useCallback((nextVisual: "question" | "thumbsup") => {
     if (timerRef.current !== null) {
       window.clearTimeout(timerRef.current);
     }
 
-    setQuestionBubbleActive(true);
+    setVisual(nextVisual);
     timerRef.current = window.setTimeout(() => {
-      setQuestionBubbleActive(false);
+      setVisual(null);
       timerRef.current = null;
     }, QUESTION_BUBBLE_DURATION_MS);
+  }, []);
 
-    return () => {
-      if (timerRef.current !== null) {
-        window.clearTimeout(timerRef.current);
-      }
-    };
-  }, [questionBubbleNonce]);
+  useEffect(() => {
+    if (questionBubbleNonce === 0 || questionBubbleNonce === lastQuestionNonceRef.current) {
+      return;
+    }
+
+    lastQuestionNonceRef.current = questionBubbleNonce;
+    startTemporaryVisual("question");
+  }, [questionBubbleNonce, startTemporaryVisual]);
+
+  useEffect(() => {
+    if (thumbsupBubbleNonce === 0 || thumbsupBubbleNonce === lastThumbsupNonceRef.current) {
+      return;
+    }
+
+    lastThumbsupNonceRef.current = thumbsupBubbleNonce;
+    startTemporaryVisual("thumbsup");
+  }, [startTemporaryVisual, thumbsupBubbleNonce]);
 
   useEffect(() => {
     return () => {
@@ -282,16 +366,16 @@ function useQuestionBubbleState(questionBubbleNonce: number) {
     };
   }, []);
 
-  return questionBubbleActive;
+  return visual;
 }
 
 function useThinkmanBubbleAnimation({
-  bubbleIconRef,
+  bubbleContentRef,
   bubbleMode,
   bubbleRef,
   bubbleTailRef,
 }: {
-  bubbleIconRef: RefObject<HTMLSpanElement | null>;
+  bubbleContentRef: RefObject<HTMLSpanElement | null>;
   bubbleMode: BubbleMode;
   bubbleRef: RefObject<HTMLButtonElement | null>;
   bubbleTailRef: RefObject<HTMLSpanElement | null>;
@@ -302,9 +386,9 @@ function useThinkmanBubbleAnimation({
   useEffect(() => {
     const bubbleNode = bubbleRef.current;
     const bubbleTailNode = bubbleTailRef.current;
-    const bubbleIconNode = bubbleIconRef.current;
+    const bubbleContentNode = bubbleContentRef.current;
 
-    if (!bubbleNode || !bubbleTailNode || !bubbleIconNode) {
+    if (!bubbleNode || !bubbleTailNode || !bubbleContentNode) {
       return;
     }
 
@@ -312,7 +396,7 @@ function useThinkmanBubbleAnimation({
 
     bounceRef.current?.kill();
     bounceRef.current = null;
-    gsap.killTweensOf([bubbleNode, bubbleTailNode, bubbleIconNode]);
+    gsap.killTweensOf([bubbleNode, bubbleTailNode, bubbleContentNode]);
 
     if (bubbleMode === "hidden") {
       if (previousBubbleMode !== "hidden") {
@@ -338,7 +422,7 @@ function useThinkmanBubbleAnimation({
             },
             0,
           );
-        gsap.set(bubbleIconNode, { y: 0 });
+        gsap.set(bubbleContentNode, { y: 0 });
       }
 
       previousBubbleModeRef.current = bubbleMode;
@@ -346,8 +430,8 @@ function useThinkmanBubbleAnimation({
     }
 
     const playJumpBounce = () => {
-      gsap.set(bubbleIconNode, { autoAlpha: 1, scale: 1, y: -5 });
-      bounceRef.current = gsap.to(bubbleIconNode, {
+      gsap.set(bubbleContentNode, { autoAlpha: 1, rotate: 0, scale: 1, y: -5 });
+      bounceRef.current = gsap.to(bubbleContentNode, {
         duration: 0.78,
         ease: "sine.inOut",
         repeat: -1,
@@ -358,7 +442,7 @@ function useThinkmanBubbleAnimation({
 
     const playQuestionPop = () => {
       gsap.fromTo(
-        bubbleIconNode,
+        bubbleContentNode,
         {
           autoAlpha: 0.45,
           scale: 0.62,
@@ -372,6 +456,37 @@ function useThinkmanBubbleAnimation({
       );
     };
 
+    const playThumbsupPop = () => {
+      gsap.fromTo(
+        bubbleContentNode,
+        {
+          autoAlpha: 0,
+          rotate: -24,
+          scale: 0.28,
+          y: 16,
+        },
+        {
+          autoAlpha: 1,
+          duration: 0.34,
+          ease: "back.out(2.4)",
+          rotate: 0,
+          scale: 1,
+          y: 0,
+        },
+      );
+
+      bounceRef.current = gsap.to(bubbleContentNode, {
+        delay: 0.12,
+        duration: 0.22,
+        ease: "sine.inOut",
+        repeat: 1,
+        rotation: 10,
+        scale: 1.06,
+        y: -8,
+        yoyo: true,
+      });
+    };
+
     if (previousBubbleMode === "hidden") {
       gsap.set([bubbleNode, bubbleTailNode], {
         autoAlpha: 0,
@@ -380,7 +495,7 @@ function useThinkmanBubbleAnimation({
         y: 18,
         transformOrigin: "100% 100%",
       });
-      gsap.set(bubbleIconNode, { autoAlpha: 1, scale: 1, y: 0 });
+      gsap.set(bubbleContentNode, { autoAlpha: 1, rotate: 0, scale: 1, y: 0 });
 
       const revealTimeline = gsap.timeline();
       revealTimeline
@@ -407,8 +522,10 @@ function useThinkmanBubbleAnimation({
 
       if (bubbleMode === "jump") {
         playJumpBounce();
-      } else {
+      } else if (bubbleMode === "question") {
         playQuestionPop();
+      } else {
+        playThumbsupPop();
       }
 
       previousBubbleModeRef.current = bubbleMode;
@@ -416,22 +533,93 @@ function useThinkmanBubbleAnimation({
       return () => {
         revealTimeline.kill();
         bounceRef.current?.kill();
-        gsap.killTweensOf([bubbleNode, bubbleTailNode, bubbleIconNode]);
+        gsap.killTweensOf([bubbleNode, bubbleTailNode, bubbleContentNode]);
       };
     }
 
     if (bubbleMode === "jump") {
       playJumpBounce();
-    } else {
-      gsap.set(bubbleIconNode, { y: 0 });
+    } else if (bubbleMode === "question") {
+      gsap.set(bubbleContentNode, { rotate: 0, y: 0 });
       playQuestionPop();
+    } else {
+      gsap.set(bubbleContentNode, { y: 0 });
+      playThumbsupPop();
     }
 
     previousBubbleModeRef.current = bubbleMode;
 
     return () => {
       bounceRef.current?.kill();
-      gsap.killTweensOf([bubbleNode, bubbleTailNode, bubbleIconNode]);
+      gsap.killTweensOf([bubbleNode, bubbleTailNode, bubbleContentNode]);
     };
-  }, [bubbleIconRef, bubbleMode, bubbleRef, bubbleTailRef]);
+  }, [bubbleContentRef, bubbleMode, bubbleRef, bubbleTailRef]);
+}
+
+function useClapBurstAnimation({
+  clapRefs,
+  thumbsupBubbleNonce,
+}: {
+  clapRefs: RefObject<Array<HTMLDivElement | null>>;
+  thumbsupBubbleNonce: number;
+}) {
+  useEffect(() => {
+    if (thumbsupBubbleNonce === 0) {
+      return;
+    }
+
+    const clapNodes = clapRefs.current.filter((node): node is HTMLDivElement => node !== null);
+    if (clapNodes.length === 0) {
+      return;
+    }
+
+    gsap.killTweensOf(clapNodes);
+    gsap.set(clapNodes, {
+      autoAlpha: 0,
+      rotate: (_index: number) => (Math.random() - 0.5) * 42,
+      scale: 0.24,
+      transformOrigin: "50% 85%",
+      y: 0,
+    });
+
+    const burstTimeline = gsap.timeline();
+    burstTimeline
+      .to(clapNodes, {
+        autoAlpha: 1,
+        duration: 0.36,
+        ease: "back.out(2.4)",
+        rotate: (_index: number) => (Math.random() - 0.5) * 20,
+        scale: 1.08,
+        stagger: 0.05,
+      })
+      .to(
+        clapNodes,
+        {
+          duration: 0.2,
+          ease: "sine.inOut",
+          repeat: 1,
+          scale: 0.96,
+          yoyo: true,
+        },
+        0.12,
+      )
+      .to(
+        clapNodes,
+        {
+          autoAlpha: 0,
+          duration: 0.34,
+          ease: "power3.in",
+          rotate: (_index: number) => (Math.random() - 0.5) * 54,
+          scale: 0.52,
+          stagger: 0.04,
+          y: 24,
+        },
+        0.72,
+      );
+
+    return () => {
+      burstTimeline.kill();
+      gsap.killTweensOf(clapNodes);
+    };
+  }, [clapRefs, thumbsupBubbleNonce]);
 }

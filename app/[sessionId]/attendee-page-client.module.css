@@ -47,6 +47,51 @@
   pointer-events: none;
 }
 
+.clapBurstLayer {
+  position: absolute;
+  inset: 0;
+  z-index: 18;
+  pointer-events: none;
+}
+
+.clapBurstItem {
+  position: absolute;
+  bottom: -1.6rem;
+  width: 4.9rem;
+  opacity: 0;
+}
+
+.clapBurstItem1 {
+  left: -0.4rem;
+}
+
+.clapBurstItem2 {
+  bottom: -1.3rem;
+  left: 12%;
+}
+
+.clapBurstItem3 {
+  bottom: -1.75rem;
+  left: 28%;
+}
+
+.clapBurstItem4 {
+  bottom: -1.15rem;
+  left: 48%;
+}
+
+.clapBurstItem5 {
+  bottom: -1.85rem;
+  left: 68%;
+}
+
+.clapBurstImage {
+  display: block;
+  width: 100%;
+  height: auto;
+  user-select: none;
+}
+
 .thinkmanWrap {
   position: absolute;
   right: -1.2rem;
@@ -104,6 +149,22 @@
   display: block;
   font-size: 2rem;
   line-height: 1;
+}
+
+.bubbleAssetWrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.35rem;
+  height: 2.35rem;
+  line-height: 1;
+}
+
+.bubbleThumbsup {
+  display: block;
+  width: 100%;
+  height: auto;
+  user-select: none;
 }
 
 .viewportShell {
@@ -289,6 +350,10 @@
 }
 
 @media (min-width: 640px) {
+  .clapBurstItem {
+    width: 5.4rem;
+  }
+
   .decorationRail {
     width: 18rem;
   }
