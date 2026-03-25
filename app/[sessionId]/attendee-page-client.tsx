@@ -1,151 +1,263 @@
 "use client";
 
-import { type ReactNode, type RefObject, useEffect, useEffectEvent, useRef, useState } from "react";
-import { defaultPersona, parsePersona, type UserPersona } from "@/lib/persona";
-
-const PERSONA_KEY = "vivaldi:userPersona";
-const PAGE_SIZE = 5;
-const LATEST_SCROLL_THRESHOLD = 72;
-
-type SessionStatus = "BEFORE" | "DURING" | "AFTER";
-
-type DisplaySegment = {
-  id: number;
-  rawText: string;
-  polishedText: string;
-  personalizedText: string | null;
-  isPersonalizing: boolean;
-};
-
-type TranscriptPage = {
-  key: string;
-  segments: DisplaySegment[];
-  isBlank: boolean;
-};
+import { gsap } from "gsap";
+import { type RefObject, useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "react";
+import { defaultPersona, type UserPersona } from "@/lib/persona";
+import {
+  createIncomingSegment,
+  type DisplaySegment,
+  ENDED_LABEL_RESERVED_HEIGHT,
+  fetchClarified,
+  fetchPersonalized,
+  getDisplayedSegmentText,
+  loadPersona,
+  MIN_SWIPE_DELTA,
+  MIN_WHEEL_DELTA,
+  PAGE_BOTTOM_PADDING,
+  PAGE_BREAK_BUFFER,
+  PAGE_TOP_PADDING,
+  type SessionStatus,
+  THINKMAN_HEAD_CLEARANCE,
+  type TranscriptPage,
+  type TranscriptPageDraft,
+  updateSegmentInList,
+} from "./attendee-page-model";
+import { buildPages, haveSamePagination, type MeasureChunkHeight } from "./attendee-page-pagination";
+import {
+  AttendeeNotFound,
+  AttendeeViewport,
+  CenteredMessage,
+  SegmentMeasurementLayer,
+  TranscriptPageSection,
+} from "./attendee-page-view";
 
 type AttendeePageClientProps = {
   sessionId: string;
 };
 
-function loadPersona(): UserPersona {
-  if (typeof window === "undefined") {
-    return defaultPersona;
-  }
-
-  try {
-    const raw = localStorage.getItem(PERSONA_KEY);
-    if (!raw) {
-      return defaultPersona;
-    }
-
-    return parsePersona(JSON.parse(raw));
-  } catch {
-    return defaultPersona;
-  }
-}
-
-async function fetchPersonalized(text: string, userPersona: UserPersona): Promise<string> {
-  try {
-    const response = await fetch("/api/personalize", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, userPersona }),
-    });
-
-    if (!response.ok) {
-      return text;
-    }
-
-    const body = (await response.json()) as { personalized?: string };
-    return body.personalized ?? text;
-  } catch {
-    return text;
-  }
-}
-
-function buildPages(segments: DisplaySegment[], sessionStatus: SessionStatus | null): TranscriptPage[] {
-  const pages: TranscriptPage[] = [];
-
-  for (let index = 0; index < segments.length; index += PAGE_SIZE) {
-    pages.push({
-      key: `page-${index / PAGE_SIZE}`,
-      segments: segments.slice(index, index + PAGE_SIZE),
-      isBlank: false,
-    });
-  }
-
-  const shouldAppendBlankPage = segments.length > 0 && sessionStatus !== "AFTER" && segments.length % PAGE_SIZE === 0;
-
-  if (shouldAppendBlankPage) {
-    pages.push({
-      key: `page-${pages.length}-blank`,
-      segments: [],
-      isBlank: true,
-    });
-  }
-
-  return pages;
-}
+type SessionStreamEvent =
+  | { type: "session"; status: SessionStatus }
+  | { type: "segment"; id: number; polishedText: string; rawText: string };
 
 export default function AttendeePageClient({ sessionId }: AttendeePageClientProps) {
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const pagesTrackRef = useRef<HTMLDivElement>(null);
+  const latestPageRef = useRef<HTMLElement>(null);
+  const measureBlockRef = useRef<HTMLElement>(null);
+  const measureRawRef = useRef<HTMLParagraphElement>(null);
+  const measureDisplayRef = useRef<HTMLParagraphElement>(null);
   const personaRef = useRef<UserPersona>(defaultPersona);
-  const stickToLatestRef = useRef(true);
-  const previousSegmentCountRef = useRef(0);
+  const touchStartYRef = useRef<number | null>(null);
+  const transitionTimelineRef = useRef<gsap.core.Timeline | null>(null);
+  const isTransitioningRef = useRef(false);
+  const previousPageCountRef = useRef(0);
+  const pageSlotIdRef = useRef(0);
+  const activePageIndexRef = useRef(0);
 
+  const [activePageIndex, setActivePageIndex] = useState(0);
   const [isMounted, setIsMounted] = useState(false);
-  const [sessionStatus, setSessionStatus] = useState<SessionStatus | null>(null);
-  const [segments, setSegments] = useState<DisplaySegment[]>([]);
   const [notFound, setNotFound] = useState(false);
-  const [isAtLatest, setIsAtLatest] = useState(true);
-
-  const transcriptPages = buildPages(segments, sessionStatus);
-  const latestSegmentId = segments.at(-1)?.id ?? null;
-
-  const syncLatestState = useEffectEvent(() => {
-    const node = scrollRef.current;
-    if (!node) {
-      return;
-    }
-
-    const distanceToBottom = node.scrollHeight - node.scrollTop - node.clientHeight;
-    const nextIsAtLatest = distanceToBottom <= LATEST_SCROLL_THRESHOLD;
-
-    stickToLatestRef.current = nextIsAtLatest;
-    setIsAtLatest(nextIsAtLatest);
-  });
-
-  const jumpToLatest = useEffectEvent((behavior: ScrollBehavior) => {
-    const node = scrollRef.current;
-    if (!node) {
-      return;
-    }
-
-    node.scrollTo({
-      top: node.scrollHeight,
-      behavior,
-    });
-
-    stickToLatestRef.current = true;
-    setIsAtLatest(true);
-  });
+  const [pageOverflowCompensation, setPageOverflowCompensation] = useState(0);
+  const [questionBubbleNonce, setQuestionBubbleNonce] = useState(0);
+  const [segments, setSegments] = useState<DisplaySegment[]>([]);
+  const [sessionStatus, setSessionStatus] = useState<SessionStatus | null>(null);
+  const [transcriptPages, setTranscriptPages] = useState<TranscriptPage[]>([]);
+  const [viewportHeight, setViewportHeight] = useState(0);
 
   const personalizeSegment = useEffectEvent((segmentId: number, text: string) => {
     const currentPersona = personaRef.current;
 
     void fetchPersonalized(text, currentPersona).then((personalizedText) => {
       setSegments((current) =>
-        current.map((segment) =>
-          segment.id === segmentId
-            ? {
-                ...segment,
-                personalizedText,
-                isPersonalizing: false,
-              }
-            : segment,
-        ),
+        updateSegmentInList(current, segmentId, (segment) => ({
+          ...segment,
+          personalizedText,
+          isPersonalizing: false,
+        })),
       );
     });
+  });
+
+  const triggerQuestionBubble = useEffectEvent(() => {
+    setQuestionBubbleNonce((current) => current + 1);
+  });
+
+  const clarifySegment = useEffectEvent((segmentId: number) => {
+    const targetSegment = segments.find((segment) => segment.id === segmentId);
+    if (!targetSegment || targetSegment.isClarifying) {
+      return;
+    }
+
+    triggerQuestionBubble();
+
+    if (targetSegment.clarifiedText) {
+      return;
+    }
+
+    const baseText = getDisplayedSegmentText(targetSegment);
+    const currentPersona = personaRef.current;
+
+    setSegments((current) =>
+      updateSegmentInList(current, segmentId, (segment) => ({
+        ...segment,
+        isClarifying: true,
+      })),
+    );
+
+    void fetchClarified(baseText, currentPersona).then((clarifiedText) => {
+      setSegments((current) =>
+        updateSegmentInList(current, segmentId, (segment) => ({
+          ...segment,
+          clarifiedText,
+          isClarifying: false,
+        })),
+      );
+    });
+  });
+
+  const animateToPage = useEffectEvent((nextPageIndex: number, direction: "forward" | "backward" | "jump") => {
+    const trackNode = pagesTrackRef.current;
+    if (!trackNode || viewportHeight === 0) {
+      return;
+    }
+
+    const boundedPageIndex = clampPageIndex(nextPageIndex, transcriptPages.length);
+    const currentPageIndex = activePageIndexRef.current;
+
+    if (boundedPageIndex === currentPageIndex && direction !== "jump") {
+      return;
+    }
+
+    transitionTimelineRef.current?.kill();
+    isTransitioningRef.current = true;
+
+    const outgoingPageBody = getPageBody(trackNode, currentPageIndex);
+    const incomingPageBody = getPageBody(trackNode, boundedPageIndex);
+
+    clearPageBodyAnimations(trackNode);
+
+    if (direction === "backward" && incomingPageBody) {
+      gsap.set(incomingPageBody, {
+        autoAlpha: 0,
+        y: -42,
+      });
+    }
+
+    const transitionTimeline = gsap.timeline({
+      onComplete: () => {
+        activePageIndexRef.current = boundedPageIndex;
+        setActivePageIndex(boundedPageIndex);
+        isTransitioningRef.current = false;
+        transitionTimelineRef.current = null;
+        clearPageBodyAnimations(trackNode);
+      },
+    });
+
+    if (direction !== "backward" && outgoingPageBody) {
+      transitionTimeline.to(
+        outgoingPageBody,
+        {
+          autoAlpha: 0,
+          duration: 0.24,
+          ease: "power2.in",
+          y: -32,
+        },
+        0,
+      );
+    }
+
+    transitionTimeline.to(
+      trackNode,
+      {
+        duration: 0.4,
+        ease: "power3.inOut",
+        y: getTrackOffset(boundedPageIndex, viewportHeight),
+      },
+      0,
+    );
+
+    if (direction === "backward" && incomingPageBody) {
+      transitionTimeline.to(
+        incomingPageBody,
+        {
+          autoAlpha: 1,
+          duration: 0.34,
+          ease: "power2.out",
+          y: 0,
+        },
+        0.08,
+      );
+    }
+
+    transitionTimelineRef.current = transitionTimeline;
+  });
+
+  const goToPreviousPage = useEffectEvent(() => {
+    if (isTransitioningRef.current) {
+      return;
+    }
+
+    const nextPageIndex = activePageIndexRef.current - 1;
+    if (nextPageIndex < 0) {
+      return;
+    }
+
+    animateToPage(nextPageIndex, "backward");
+  });
+
+  const goToNextPage = useEffectEvent((mode: "manual" | "jump" = "manual") => {
+    if (isTransitioningRef.current) {
+      return;
+    }
+
+    const nextPageIndex =
+      mode === "jump"
+        ? clampPageIndex(transcriptPages.length - 1, transcriptPages.length)
+        : clampPageIndex(activePageIndexRef.current + 1, transcriptPages.length);
+
+    if (nextPageIndex === activePageIndexRef.current) {
+      return;
+    }
+
+    animateToPage(nextPageIndex, mode === "jump" ? "jump" : "forward");
+  });
+
+  const handleWheelNavigation = useEffectEvent((deltaY: number) => {
+    if (Math.abs(deltaY) < MIN_WHEEL_DELTA) {
+      return;
+    }
+
+    if (deltaY < 0) {
+      goToPreviousPage();
+      return;
+    }
+
+    goToNextPage("manual");
+  });
+
+  const handleTouchStart = useEffectEvent((clientY: number) => {
+    touchStartYRef.current = clientY;
+  });
+
+  const handleTouchEnd = useEffectEvent((clientY: number) => {
+    const startY = touchStartYRef.current;
+    touchStartYRef.current = null;
+
+    if (startY === null) {
+      return;
+    }
+
+    const deltaY = clientY - startY;
+    if (Math.abs(deltaY) < MIN_SWIPE_DELTA) {
+      return;
+    }
+
+    if (deltaY > 0) {
+      goToPreviousPage();
+      return;
+    }
+
+    goToNextPage("manual");
   });
 
   useEffect(() => {
@@ -153,45 +265,170 @@ export default function AttendeePageClient({ sessionId }: AttendeePageClientProp
     personaRef.current = loadPersona();
   }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!isMounted) {
       return;
     }
 
-    const node = scrollRef.current;
-    if (!node) {
+    const updateViewportHeight = () => {
+      setViewportHeight(viewportRef.current?.clientHeight ?? 0);
+    };
+
+    updateViewportHeight();
+
+    const viewportNode = viewportRef.current;
+    if (!viewportNode) {
       return;
     }
 
-    jumpToLatest("auto");
+    if (typeof ResizeObserver !== "undefined") {
+      const resizeObserver = new ResizeObserver(updateViewportHeight);
+      resizeObserver.observe(viewportNode);
 
-    const handleScroll = () => {
-      syncLatestState();
-    };
+      return () => {
+        resizeObserver.disconnect();
+      };
+    }
 
-    node.addEventListener("scroll", handleScroll, { passive: true });
-
+    window.addEventListener("resize", updateViewportHeight);
     return () => {
-      node.removeEventListener("scroll", handleScroll);
+      window.removeEventListener("resize", updateViewportHeight);
     };
   }, [isMounted]);
 
   useEffect(() => {
+    if (!isMounted || viewportHeight === 0) {
+      return;
+    }
+
+    setPageOverflowCompensation(0);
+  }, [isMounted, viewportHeight]);
+
+  useLayoutEffect(() => {
     if (!isMounted) {
       return;
     }
 
-    const hasNewSegments = segments.length > previousSegmentCountRef.current;
-    previousSegmentCountRef.current = segments.length;
-
-    const shouldAdvanceToNextPage = segments.length > 0 && segments.length % PAGE_SIZE === 0;
-
-    if (!hasNewSegments || !stickToLatestRef.current || !shouldAdvanceToNextPage) {
+    if (segments.length === 0) {
+      setTranscriptPages([]);
       return;
     }
 
-    jumpToLatest("smooth");
-  }, [isMounted, segments.length]);
+    const measureBlockNode = measureBlockRef.current;
+    const measureRawNode = measureRawRef.current;
+    const measureDisplayNode = measureDisplayRef.current;
+
+    if (!measureBlockNode || !measureRawNode || !measureDisplayNode) {
+      return;
+    }
+
+    const measureChunkHeight = createMeasureChunkHeight({
+      measureBlockNode,
+      measureDisplayNode,
+      measureRawNode,
+    });
+    const nextPages = buildPages(
+      segments,
+      getAvailablePageHeight({
+        pageOverflowCompensation,
+        sessionStatus,
+        viewportHeight,
+      }),
+      measureChunkHeight,
+    );
+
+    setTranscriptPages((currentPages) => {
+      if (haveSamePagination(currentPages, nextPages)) {
+        return currentPages;
+      }
+
+      const normalizedNextPages = normalizeTranscriptPages({
+        currentPages,
+        nextPages,
+        nextSlotId: () => pageSlotIdRef.current++,
+      });
+
+      if (normalizedNextPages.length < currentPages.length && viewportHeight > 0) {
+        return currentPages;
+      }
+
+      return normalizedNextPages;
+    });
+  }, [isMounted, pageOverflowCompensation, segments, sessionStatus, viewportHeight]);
+
+  useLayoutEffect(() => {
+    if (!isMounted || viewportHeight === 0 || transcriptPages.length === 0) {
+      return;
+    }
+
+    const latestPageNode = latestPageRef.current;
+    if (!latestPageNode) {
+      return;
+    }
+
+    const minimumOverflow = sessionStatus === "AFTER" ? 1 : 2;
+    const overflowAmount = Math.ceil(latestPageNode.scrollHeight - latestPageNode.clientHeight);
+    if (overflowAmount <= minimumOverflow) {
+      return;
+    }
+
+    setPageOverflowCompensation((current) => {
+      const next = Math.max(current, overflowAmount + 12);
+      return next === current ? current : next;
+    });
+  }, [isMounted, sessionStatus, transcriptPages, viewportHeight]);
+
+  useLayoutEffect(() => {
+    const trackNode = pagesTrackRef.current;
+    if (!isMounted || viewportHeight === 0 || !trackNode) {
+      return;
+    }
+
+    if (transcriptPages.length === 0) {
+      previousPageCountRef.current = 0;
+      activePageIndexRef.current = 0;
+      setActivePageIndex(0);
+      gsap.set(trackNode, { clearProps: "transform" });
+      return;
+    }
+
+    const previousPageCount = previousPageCountRef.current;
+    const previousLatestPageIndex = Math.max(previousPageCount - 1, 0);
+    const nextPageIndex = transcriptPages.length - 1;
+    const previousPageIndex = activePageIndexRef.current;
+
+    previousPageCountRef.current = transcriptPages.length;
+
+    if (previousPageCount === 0) {
+      syncActivePage({
+        activePageIndexRef,
+        pageIndex: nextPageIndex,
+        setActivePageIndex,
+      });
+      gsap.set(trackNode, { y: getTrackOffset(nextPageIndex, viewportHeight) });
+      return;
+    }
+
+    if (nextPageIndex <= previousPageIndex) {
+      const boundedPageIndex = clampPageIndex(previousPageIndex, transcriptPages.length);
+      syncActivePage({
+        activePageIndexRef,
+        pageIndex: boundedPageIndex,
+        setActivePageIndex,
+      });
+      gsap.set(trackNode, { y: getTrackOffset(boundedPageIndex, viewportHeight) });
+      return;
+    }
+
+    if (previousPageIndex >= previousLatestPageIndex) {
+      queueMicrotask(() => {
+        animateToPage(nextPageIndex, "forward");
+      });
+      return;
+    }
+
+    gsap.set(trackNode, { y: getTrackOffset(previousPageIndex, viewportHeight) });
+  }, [isMounted, transcriptPages.length, viewportHeight]);
 
   useEffect(() => {
     if (!isMounted) {
@@ -201,9 +438,7 @@ export default function AttendeePageClient({ sessionId }: AttendeePageClientProp
     const eventSource = new EventSource(`/api/sessions/${sessionId}/stream`);
 
     eventSource.onmessage = (event) => {
-      const data = JSON.parse(event.data as string) as
-        | { type: "session"; status: SessionStatus }
-        | { type: "segment"; id: number; polishedText: string; rawText: string };
+      const data = JSON.parse(event.data as string) as SessionStreamEvent;
 
       if (data.type === "session") {
         setSessionStatus(data.status);
@@ -215,16 +450,7 @@ export default function AttendeePageClient({ sessionId }: AttendeePageClientProp
           return current;
         }
 
-        return [
-          ...current,
-          {
-            id: data.id,
-            rawText: data.rawText,
-            polishedText: data.polishedText,
-            personalizedText: null,
-            isPersonalizing: true,
-          },
-        ];
+        return [...current, createIncomingSegment(data)];
       });
 
       personalizeSegment(data.id, data.polishedText);
@@ -258,164 +484,161 @@ export default function AttendeePageClient({ sessionId }: AttendeePageClientProp
   }
 
   if (notFound) {
-    return (
-      <main className="flex min-h-screen items-center justify-center bg-[linear-gradient(180deg,#faf4eb,#efe1d1)] px-6 py-10 text-[#20150f]">
-        <div className="max-w-sm text-center">
-          <p className="text-2xl font-black tracking-[-0.04em]">セッションが見つかりません</p>
-          <p className="mt-3 text-sm leading-7 text-[#756457]">
-            URLが正しいか、発表者がセッションを開始しているか確認してください。
-          </p>
-        </div>
-      </main>
-    );
+    return <AttendeeNotFound />;
   }
 
   return (
     <AttendeeViewport
-      scrollRef={scrollRef}
-      showJumpToLatest={!isAtLatest && segments.length > 0}
-      onJumpToLatest={() => jumpToLatest("smooth")}
+      measurementLayer={
+        <SegmentMeasurementLayer
+          measureBlockRef={measureBlockRef}
+          measureDisplayRef={measureDisplayRef}
+          measureRawRef={measureRawRef}
+        />
+      }
+      onJumpToLatest={() => goToNextPage("jump")}
+      onTouchEnd={handleTouchEnd}
+      onTouchStart={handleTouchStart}
+      onWheelNavigate={handleWheelNavigation}
+      questionBubbleNonce={questionBubbleNonce}
+      showJumpToLatest={activePageIndex < transcriptPages.length - 1}
+      trackRef={pagesTrackRef}
+      viewportRef={viewportRef}
     >
-      {sessionStatus === null || sessionStatus === "BEFORE" ? (
-        <CenteredMessage message="発表開始までお待ちください" />
-      ) : sessionStatus === "DURING" && segments.length === 0 ? (
-        <CenteredMessage message="まもなく翻訳を開始します" />
-      ) : (
-        transcriptPages.map((page, pageIndex) => (
-          <TranscriptPageSection
-            key={page.key}
-            page={page}
-            isLatestPage={pageIndex === transcriptPages.length - 1}
-            latestSegmentId={latestSegmentId}
-            showEndedLabel={sessionStatus === "AFTER" && pageIndex === transcriptPages.length - 1}
-          />
-        ))
-      )}
+      {renderAttendeeContent({
+        clarifySegment,
+        latestPageRef,
+        segments,
+        sessionStatus,
+        transcriptPages,
+      })}
     </AttendeeViewport>
   );
 }
 
-function AttendeeViewport({
-  children,
-  scrollRef,
-  showJumpToLatest = false,
-  onJumpToLatest,
+function renderAttendeeContent({
+  clarifySegment,
+  latestPageRef,
+  segments,
+  sessionStatus,
+  transcriptPages,
 }: {
-  children: ReactNode;
-  scrollRef?: RefObject<HTMLDivElement | null>;
-  showJumpToLatest?: boolean;
-  onJumpToLatest?: () => void;
+  clarifySegment: (segmentId: number) => void;
+  latestPageRef: RefObject<HTMLElement | null>;
+  segments: DisplaySegment[];
+  sessionStatus: SessionStatus | null;
+  transcriptPages: TranscriptPage[];
 }) {
-  return (
-    <main
-      className="relative h-[100svh] overflow-hidden bg-[radial-gradient(circle_at_top,rgba(255,248,237,0.95),rgba(255,248,237,0.58)_22%,transparent_48%),linear-gradient(180deg,#f7efe5_0%,#ecdcc8_45%,#e3cfbb_100%)] text-[#1f1510]"
-      style={{
-        fontFamily:
-          '"Hiragino Maru Gothic ProN", "Hiragino Maru Gothic Pro", "YuKyokasho Yoko", "Arial Rounded MT Bold", sans-serif',
-      }}
-    >
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-x-[-10%] top-[-18%] h-[38vh] rounded-full bg-[radial-gradient(circle,rgba(255,255,255,0.85),rgba(255,255,255,0.12)_58%,transparent_72%)] blur-3xl"
-      />
+  if (sessionStatus === null || sessionStatus === "BEFORE") {
+    return <CenteredMessage message="発表開始までお待ちください" />;
+  }
 
-      <div className="relative mx-auto flex h-full w-full max-w-xl flex-col">
-        <div ref={scrollRef} className="flex-1 snap-y snap-mandatory overflow-y-auto overscroll-y-contain">
-          {children}
-        </div>
+  if (sessionStatus === "DURING" && segments.length === 0) {
+    return <CenteredMessage message="まもなく翻訳を開始します" />;
+  }
 
-        {showJumpToLatest && (
-          <button
-            type="button"
-            className="absolute bottom-7 right-5 z-30 rounded-full border border-[#2b1e15]/10 bg-[#1f1510] px-4 py-3 text-sm font-semibold text-white shadow-[0_18px_40px_rgba(36,22,13,0.34)] transition-transform duration-200 hover:-translate-y-0.5 sm:right-6"
-            onClick={onJumpToLatest}
-          >
-            最新へ戻る
-          </button>
-        )}
-      </div>
-    </main>
+  return transcriptPages.map((page, pageIndex) => (
+    <TranscriptPageSection
+      key={page.key}
+      onRequestClarify={clarifySegment}
+      page={page}
+      pageIndex={pageIndex}
+      sectionRef={pageIndex === transcriptPages.length - 1 ? latestPageRef : undefined}
+      showEndedLabel={sessionStatus === "AFTER" && pageIndex === transcriptPages.length - 1}
+    />
+  ));
+}
+
+function createMeasureChunkHeight({
+  measureBlockNode,
+  measureDisplayNode,
+  measureRawNode,
+}: {
+  measureBlockNode: HTMLElement;
+  measureDisplayNode: HTMLParagraphElement;
+  measureRawNode: HTMLParagraphElement;
+}): MeasureChunkHeight {
+  return (rawText, displayText, showFeedbackButtons) => {
+    measureRawNode.textContent = rawText ?? "";
+    measureRawNode.style.display = rawText ? "" : "none";
+    measureDisplayNode.textContent = displayText;
+    measureBlockNode.dataset.showFeedbackButtons = showFeedbackButtons ? "true" : "false";
+    return Math.ceil(measureBlockNode.getBoundingClientRect().height);
+  };
+}
+
+function normalizeTranscriptPages({
+  currentPages,
+  nextPages,
+  nextSlotId,
+}: {
+  currentPages: TranscriptPage[];
+  nextPages: TranscriptPageDraft[];
+  nextSlotId: () => number;
+}) {
+  return nextPages.map((page, pageIndex) => ({
+    key: currentPages[pageIndex]?.key ?? `page-slot-${nextSlotId()}`,
+    chunks: page.chunks.map((chunk, chunkIndex) => ({
+      key: currentPages[pageIndex]?.chunks[chunkIndex]?.key ?? `chunk-${chunk.segmentId}-${chunkIndex}-${nextSlotId()}`,
+      segmentId: chunk.segmentId,
+      rawText: chunk.rawText,
+      displayText: chunk.displayText,
+      isClarified: chunk.isClarified,
+      showFeedbackButtons: chunk.showFeedbackButtons,
+    })),
+  }));
+}
+
+function getAvailablePageHeight({
+  pageOverflowCompensation,
+  sessionStatus,
+  viewportHeight,
+}: {
+  pageOverflowCompensation: number;
+  sessionStatus: SessionStatus | null;
+  viewportHeight: number;
+}) {
+  const reservedHeight = sessionStatus === "AFTER" ? ENDED_LABEL_RESERVED_HEIGHT : 0;
+
+  return Math.max(
+    viewportHeight -
+      PAGE_TOP_PADDING -
+      PAGE_BOTTOM_PADDING -
+      THINKMAN_HEAD_CLEARANCE -
+      reservedHeight -
+      PAGE_BREAK_BUFFER -
+      pageOverflowCompensation,
+    0,
   );
 }
 
-function TranscriptPageSection({
-  page,
-  isLatestPage,
-  latestSegmentId,
-  showEndedLabel,
-}: {
-  page: TranscriptPage;
-  isLatestPage: boolean;
-  latestSegmentId: number | null;
-  showEndedLabel: boolean;
-}) {
-  return (
-    <section className="flex h-[100svh] snap-start flex-col px-5 pb-28 pt-8 sm:px-6">
-      {!page.isBlank && (
-        <div className="space-y-6">
-          {page.segments.map((segment) => (
-            <TranscriptBlock
-              key={segment.id}
-              segment={segment}
-              isLatestPage={isLatestPage}
-              isNewestSegment={segment.id === latestSegmentId}
-            />
-          ))}
-        </div>
-      )}
-      {showEndedLabel && (
-        <div className="mt-auto pt-6 text-center text-sm font-medium text-[#6b584c]">発表は終了しました</div>
-      )}
-    </section>
-  );
+function clearPageBodyAnimations(trackNode: HTMLDivElement) {
+  gsap.set(trackNode.querySelectorAll<HTMLElement>("[data-page-body]"), {
+    clearProps: "opacity,transform",
+  });
 }
 
-function TranscriptBlock({
-  segment,
-  isLatestPage,
-  isNewestSegment,
-}: {
-  segment: DisplaySegment;
-  isLatestPage: boolean;
-  isNewestSegment: boolean;
-}) {
-  const displayedText = segment.personalizedText ?? segment.polishedText;
-
-  return (
-    <article
-      className={[
-        "transition-all duration-500",
-        isLatestPage ? "opacity-100" : "opacity-78",
-        isNewestSegment ? "translate-y-0" : "",
-      ].join(" ")}
-    >
-      <p className="max-w-[30ch] text-[clamp(0.92rem,3.5vw,1.08rem)] font-medium leading-[1.5] tracking-[0.01em] text-[#9d978f]">
-        {segment.rawText}
-      </p>
-      <p
-        className={[
-          "mt-1.5 max-w-[14ch] text-[clamp(1.72rem,7vw,2.45rem)] font-black leading-[1.04] tracking-[-0.06em] text-[#19120d]",
-          isNewestSegment ? "drop-shadow-[0_10px_32px_rgba(75,46,20,0.12)]" : "",
-        ].join(" ")}
-      >
-        {displayedText}
-      </p>
-      {segment.isPersonalizing && (
-        <div className="mt-3 flex items-center gap-2 text-[0.72rem] font-semibold uppercase tracking-[0.22em] text-[#8c6f4d]">
-          <span className="h-2 w-2 rounded-full bg-[#d89f4a] animate-pulse" />
-          表現を調整中
-        </div>
-      )}
-    </article>
-  );
+function getPageBody(trackNode: HTMLDivElement, pageIndex: number) {
+  return trackNode.querySelector<HTMLElement>(`[data-page-body="${pageIndex}"]`);
 }
 
-function CenteredMessage({ message }: { message: string }) {
-  return (
-    <section className="flex h-[100svh] items-center justify-center px-6 py-8">
-      <p className="text-center text-[clamp(1.65rem,7vw,2.4rem)] font-black tracking-[-0.05em] text-[#6b584c]">
-        {message}
-      </p>
-    </section>
-  );
+function getTrackOffset(pageIndex: number, viewportHeight: number) {
+  return -pageIndex * viewportHeight;
+}
+
+function clampPageIndex(pageIndex: number, pageCount: number) {
+  return Math.min(Math.max(pageIndex, 0), Math.max(pageCount - 1, 0));
+}
+
+function syncActivePage({
+  activePageIndexRef,
+  pageIndex,
+  setActivePageIndex,
+}: {
+  activePageIndexRef: { current: number };
+  pageIndex: number;
+  setActivePageIndex: (pageIndex: number) => void;
+}) {
+  activePageIndexRef.current = pageIndex;
+  setActivePageIndex(pageIndex);
 }

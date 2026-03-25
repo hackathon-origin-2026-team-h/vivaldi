@@ -1,4 +1,4 @@
-import AttendeePageClient from "./attendee-page-client";
+import AttendeePageShell from "./attendee-page-shell";
 
 type AttendeePageProps = {
   params: Promise<{ sessionId: string }>;
@@ -7,5 +7,5 @@ type AttendeePageProps = {
 export default async function AttendeePage({ params }: AttendeePageProps) {
   const { sessionId } = await params;
 
-  return <AttendeePageClient sessionId={sessionId} />;
+  return <AttendeePageShell sessionId={sessionId} />;
 }
