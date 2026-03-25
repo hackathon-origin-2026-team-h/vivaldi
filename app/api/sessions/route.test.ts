@@ -21,8 +21,7 @@ describe("POST /api/sessions", () => {
       createdAt: new Date(),
     } as never);
 
-    const req = new Request("http://localhost/api/sessions", { method: "POST" });
-    const res = await POST(req);
+    const res = await POST();
     const body = await res.json();
 
     expect(res.status).toBe(201);
@@ -32,17 +31,15 @@ describe("POST /api/sessions", () => {
 
   it("生成される id は文字列である", async () => {
     const mockCreate = vi.mocked(prisma.talkSession.create);
-    mockCreate.mockImplementationOnce(async ({ data }) => ({
-      id: data.id as string,
-      status: "BEFORE",
-      createdAt: new Date(),
-    }));
+    mockCreate.mockResolvedValueOnce({ id: "dummy", status: "BEFORE", createdAt: new Date() } as never);
 
-    const req = new Request("http://localhost/api/sessions", { method: "POST" });
-    const res = await POST(req);
+    const res = await POST();
     const body = await res.json();
 
-    expect(typeof body.id).toBe("string");
-    expect(body.id.length).toBeGreaterThan(0);
+    // create に渡された id が文字列であることを確認
+    const calledWith = mockCreate.mock.calls[0][0] as { data: { id: string } };
+    expect(typeof calledWith.data.id).toBe("string");
+    expect(calledWith.data.id.length).toBeGreaterThan(0);
+    expect(body.id).toBe("dummy");
   });
 });
