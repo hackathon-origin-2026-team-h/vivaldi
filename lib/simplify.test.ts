@@ -19,6 +19,7 @@ describe("simplify", () => {
   beforeEach(() => {
     createMock.mockReset();
     process.env.ANTHROPIC_API_KEY = "test-key";
+    (globalThis as Record<string, unknown>)._claude = undefined;
   });
 
   it("正常なJSONレスポンスをパースして返す", async () => {
