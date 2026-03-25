@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { gemini } from "@/lib/gemini";
+import { getClient } from "@/lib/claude";
 import { parsePersona, type UserPersona } from "@/lib/persona";
 
 function summarizePersona(persona: UserPersona): string {
@@ -33,14 +33,13 @@ export async function POST(request: Request) {
   const persona = parsePersona(body.userPersona);
 
   try {
-    const response = await gemini.models.generateContent({
-      model: "gemini-2.0-flash",
-      contents: [
+    const response = await getClient().messages.create({
+      model: "claude-opus-4-6",
+      max_tokens: 1024,
+      messages: [
         {
           role: "user",
-          parts: [
-            {
-              text: `以下の発表テキストを、聴講者が理解しやすい表現に意訳してください。
+          content: `以下の発表テキストを、聴講者が理解しやすい表現に意訳してください。
 
 【聴講者の特性】
 ${summarizePersona(persona)}
@@ -52,13 +51,12 @@ ${text}
 - 内容を変えず、表現だけを平易にする
 - 専門用語は聴講者が知らない可能性がある場合、括弧で簡潔な説明を補足する
 - 意訳後のテキストのみ返す`,
-            },
-          ],
         },
       ],
     });
 
-    const personalized = response.text?.trim() ?? text;
+    const block = response.content.find((b) => b.type === "text");
+    const personalized = (block?.type === "text" ? block.text.trim() : "") || text;
     return NextResponse.json({ personalized });
   } catch (err) {
     console.error("personalize error:", err);

@@ -22,7 +22,6 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",
     "@deepgram/sdk": "^5.0.0",
-    "@google/genai": "^1.46.0",
     "@libsql/client": "^0.17.2",
     "@prisma/adapter-libsql": "^7.5.0",
     "@prisma/client": "^7.5.0",

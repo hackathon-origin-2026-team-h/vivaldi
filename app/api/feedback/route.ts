@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { gemini } from "@/lib/gemini";
+import { getClient } from "@/lib/claude";
 import { parsePersona } from "@/lib/persona";
 
 const MAX_FEEDBACK_HISTORY = 10;
@@ -20,14 +20,13 @@ export async function POST(request: Request) {
   const persona = parsePersona(body.userPersona);
 
   try {
-    const response = await gemini.models.generateContent({
-      model: "gemini-2.0-flash",
-      contents: [
+    const response = await getClient().messages.create({
+      model: "claude-opus-4-6",
+      max_tokens: 256,
+      messages: [
         {
           role: "user",
-          parts: [
-            {
-              text: `以下のテキストを読んだ聴講者が「わかりにくい」と感じました。
+          content: `以下のテキストを読んだ聴講者が「わかりにくい」と感じました。
 
 【テキスト】
 ${text}
@@ -38,13 +37,12 @@ ${JSON.stringify(persona)}
 このテキストの何がわかりにくかったか、1〜2文で推測してください。
 例: "量子もつれなど量子力学固有の概念への不慣れが原因と考えられる"
 推測のみ返してください。`,
-            },
-          ],
         },
       ],
     });
 
-    const inference = response.text?.trim() ?? "";
+    const block = response.content.find((b) => b.type === "text");
+    const inference = block?.type === "text" ? block.text.trim() : "";
     const updatedPersona = {
       ...persona,
       feedbackHistory: [...persona.feedbackHistory, { inference, timestamp: Date.now() }].slice(-MAX_FEEDBACK_HISTORY),
