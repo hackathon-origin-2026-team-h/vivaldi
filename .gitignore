@@ -46,3 +46,6 @@ next-env.d.ts
 /app/generated/prisma
 
 dev.db
+# cloudflare / opennext
+/.open-next/
+/.wrangler/

@@ -109,8 +109,8 @@ export default function SpeakerPage() {
   useEffect(() => {
     void fetch("/api/sessions", { method: "POST" })
       .then((res) => res.json())
-      .then(async (body: { id: string }) => {
-        const id = body.id;
+      .then(async (body) => {
+        const { id } = body as { id: string };
         setSessionId(id);
         sessionIdRef.current = id;
 

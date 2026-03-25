@@ -18,7 +18,10 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:push": "prisma db push",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "build:worker": "opennextjs-cloudflare build && node scripts/inject-do.mjs",
+    "preview:worker": "wrangler dev",
+    "deploy:worker": "opennextjs-cloudflare deploy"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",
@@ -31,6 +34,8 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.8",
+    "@cloudflare/workers-types": "^4.20260317.1",
+    "@opennextjs/cloudflare": "^1.17.3",
     "@playwright/test": "^1.58.2",
     "@tailwindcss/postcss": "^4",
     "@testing-library/jest-dom": "^6.9.1",
@@ -47,6 +52,7 @@
     "jsdom": "^29.0.1",
     "tailwindcss": "^4",
     "typescript": "^5",
-    "vitest": "^4.1.1"
+    "vitest": "^4.1.1",
+    "wrangler": "^4.77.0"
   }
 }
