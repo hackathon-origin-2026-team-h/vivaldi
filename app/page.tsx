@@ -1,7 +1,8 @@
-import { Syne, Zen_Kaku_Gothic_New } from "next/font/google";
+import { Syne, Kosugi_Maru, Unbounded } from "next/font/google";
 
 const syne = Syne({ subsets: ["latin"], weight: ["400", "700", "800"] });
-const zen = Zen_Kaku_Gothic_New({ subsets: ["latin"], weight: ["300", "400"] });
+const zen = Kosugi_Maru({ subsets: ["latin"], weight: ["400"] });
+const unbounded = Unbounded({ subsets: ["latin"], weight: ["700"] });
 
 export default function Home() {
   return (
@@ -88,7 +89,7 @@ export default function Home() {
           justifyContent: "space-between",
         }}
       >
-        <span className={`logo-text ${syne.className}`} style={{ fontSize: 22, fontWeight: 800 }}>
+        <span className={`logo-text ${unbounded.className}`} style={{ fontSize: 18, fontWeight: 700 }}>
           fumumu<span style={{ color: "#ff6b35" }}>.</span>
         </span>
         <a href="/speaker" className={`nav-btn ${syne.className}`}>
@@ -97,29 +98,30 @@ export default function Home() {
       </nav>
 
       {/* Hero */}
-      <section style={{ padding: "80px 40px 100px", maxWidth: 1200, margin: "0 auto" }}>
-        <div style={{ maxWidth: 640 }}>
-          <div>
-            <h1
-              className={`hero-title ${syne.className}`}
-              style={{ fontSize: 72, fontWeight: 800, lineHeight: 1.05, marginBottom: 24 }}
-            >
-              fumumu<span style={{ color: "#ff6b35" }}>.</span>
-            </h1>
+      <section style={{ background: "#1a1a1a", padding: "80px 40px 72px", overflow: "hidden" }}>
+        <div style={{ maxWidth: 1200, margin: "0 auto" }}>
+          {/* giant title */}
+          <h1
+            className={unbounded.className}
+            style={{
+              fontSize: "clamp(72px, 14vw, 200px)",
+              fontWeight: 700,
+              lineHeight: 0.9,
+              color: "#fff",
+              letterSpacing: "-0.02em",
+              margin: "0 -4px 40px",
+            }}
+          >
+            fumumu<span style={{ color: "#ff6b35" }}>.</span>
+          </h1>
 
-            <p className={zen.className} style={{ fontSize: 18, lineHeight: 1.9, color: "#aaa", marginBottom: 40 }}>
-              ふむむ、わかった。
-              <br />
-              専門用語を、その場で、
-              <br />
-              あなたの言葉に。
+          {/* tagline + button */}
+          <div style={{ display: "flex", alignItems: "center", gap: 40, flexWrap: "wrap" }}>
+            <p className={zen.className} style={{ fontSize: 16, color: "rgba(255,255,255,0.65)", lineHeight: 1.8 }}>
+              ふむむ、わかった。専門用語を、その場で、あなたの言葉に。
             </p>
-
-            <a href="/speaker" className={`btn-orange ${syne.className}`}>
-              始める →
-            </a>
+            <a href="/speaker" className={`btn-orange ${syne.className}`} style={{ flexShrink: 0 }}>始める →</a>
           </div>
-
         </div>
       </section>
 
@@ -144,7 +146,7 @@ export default function Home() {
             </h2>
           </div>
           <div>
-            <p className={zen.className} style={{ fontSize: 16, lineHeight: 2, color: "#aaa" }}>
+            <p className={zen.className} style={{ fontSize: 16, lineHeight: 2, color: "#666" }}>
               学会・勉強会・社内発表。
               <br />
               専門知識の差が、理解の壁になる。
@@ -192,7 +194,7 @@ export default function Home() {
                 <rect x="24" y="58" width="32" height="4" rx="2" fill="rgba(0,0,0,0.2)" />
                 <rect x="24" y="65" width="22" height="4" rx="2" fill="rgba(0,0,0,0.15)" />
               </svg>
-              <h3 className={syne.className} style={{ fontSize: 22, fontWeight: 800, color: "#fff", marginBottom: 12 }}>QRを生成</h3>
+              <h3 style={{ fontSize: 22, fontWeight: 800, color: "#fff", marginBottom: 12 }}>QRを生成</h3>
               <p className={zen.className} style={{ fontSize: 14, color: "rgba(255,255,255,0.8)", lineHeight: 1.8 }}>
                 発表者がセッションを作成。QRコードを投影するだけで準備完了。
               </p>
@@ -226,8 +228,8 @@ export default function Home() {
                 <rect x="24" y="58" width="32" height="4" rx="2" fill="#e0ddd8" />
                 <rect x="24" y="65" width="22" height="4" rx="2" fill="#eeecea" />
               </svg>
-              <h3 className={syne.className} style={{ fontSize: 22, fontWeight: 800, color: "#1a1a1a", marginBottom: 12 }}>QRを読む</h3>
-              <p className={zen.className} style={{ fontSize: 14, color: "#888", lineHeight: 1.8 }}>
+              <h3 style={{ fontSize: 22, fontWeight: 800, color: "#1a1a1a", marginBottom: 12 }}>QRを読む</h3>
+              <p className={zen.className} style={{ fontSize: 14, color: "#555", lineHeight: 1.8 }}>
                 聴講者はスマホでQRをスキャン。アプリ不要、ブラウザで即アクセス。
               </p>
             </div>
@@ -263,8 +265,8 @@ export default function Home() {
                 <rect x="43" y="50" width="16" height="4" rx="2" fill="#ffd4c2" />
                 <polygon points="46,56 54,56 50,62" fill="#fff0eb" />
               </svg>
-              <h3 className={syne.className} style={{ fontSize: 22, fontWeight: 800, color: "#1a1a1a", marginBottom: 12 }}>わかる言葉で届く</h3>
-              <p className={zen.className} style={{ fontSize: 14, color: "#888", lineHeight: 1.8 }}>
+              <h3 style={{ fontSize: 22, fontWeight: 800, color: "#1a1a1a", marginBottom: 12 }}>わかる言葉で届く</h3>
+              <p className={zen.className} style={{ fontSize: 14, color: "#555", lineHeight: 1.8 }}>
                 AIが専門用語を自動で言い換え。理解度に合わせてリアルタイムに翻訳。
               </p>
             </div>
@@ -287,7 +289,7 @@ export default function Home() {
 
             <div className={`role-card-listener ${syne.className}`}>
               <h3 style={{ fontSize: 32, fontWeight: 800, marginBottom: 16 }}>参加する</h3>
-              <p className={zen.className} style={{ fontSize: 14, color: "rgba(255,255,255,0.5)", lineHeight: 1.8 }}>
+              <p className={zen.className} style={{ fontSize: 14, color: "rgba(255,255,255,0.85)", lineHeight: 1.8 }}>
                 QRをスキャンするだけ。
                 <br />
                 あなたのペルソナに合わせた言葉で届く。
@@ -316,7 +318,7 @@ export default function Home() {
           alignItems: "center",
         }}
       >
-        <span className={syne.className} style={{ fontSize: 18, fontWeight: 800, color: "rgba(255,255,255,0.3)" }}>
+        <span className={unbounded.className} style={{ fontSize: 14, fontWeight: 700, color: "rgba(255,255,255,0.3)" }}>
           fumumu<span style={{ color: "rgba(255,107,53,0.5)" }}>.</span>
         </span>
       </footer>
