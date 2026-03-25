@@ -9,6 +9,7 @@ type TranscriptSegment = {
   id: number;
   text: string;
   isFinal: boolean;
+  polished?: string;
 };
 
 function float32ToInt16(float32: Float32Array): Int16Array {
@@ -18,6 +19,22 @@ function float32ToInt16(float32: Float32Array): Int16Array {
     int16[i] = clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff;
   }
   return int16;
+}
+
+async function fetchPolished(text: string): Promise<string> {
+  try {
+    const res = await fetch("/api/polish", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+    if (!res.ok) return text;
+    const body = (await res.json()) as { polished?: string };
+    return body.polished ?? text;
+  } catch (err) {
+    console.error("Failed to fetch polished text:", err);
+    return text;
+  }
 }
 
 export default function SpeakerPage() {
@@ -125,8 +142,18 @@ export default function SpeakerPage() {
           if (lastInterimIdx !== -1) {
             const next = [...prev];
             next[lastInterimIdx] = { ...next[lastInterimIdx], text: transcript, isFinal: true };
+            // Polish in the background
+            const targetId = next[lastInterimIdx].id;
+            void fetchPolished(transcript).then((polished) => {
+              setSegments((s) => s.map((seg) => (seg.id === targetId ? { ...seg, polished } : seg)));
+            });
             return next;
           }
+
+          // Polish in the background
+          void fetchPolished(transcript).then((polished) => {
+            setSegments((s) => s.map((seg) => (seg.id === newId ? { ...seg, polished } : seg)));
+          });
           return [...prev, { id: newId, text: transcript, isFinal: true }];
         });
       });
@@ -202,7 +229,7 @@ export default function SpeakerPage() {
                   key={seg.id}
                   className={`text-base leading-relaxed ${seg.isFinal ? "text-gray-900" : "text-gray-400"}`}
                 >
-                  {seg.text}
+                  {seg.isFinal ? (seg.polished ?? seg.text) : seg.text}
                 </p>
               ))}
             </div>
