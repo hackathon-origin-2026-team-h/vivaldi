@@ -139,14 +139,14 @@ export default function SpeakerPage() {
             next[lastInterimIdx] = { ...next[lastInterimIdx], text: transcript, isFinal: true };
             // Polish in the background
             const targetId = next[lastInterimIdx].id;
-            fetchPolished(transcript).then((polished) => {
+            void fetchPolished(transcript).then((polished) => {
               setSegments((s) => s.map((seg) => (seg.id === targetId ? { ...seg, polished } : seg)));
             });
             return next;
           }
 
           // Polish in the background
-          fetchPolished(transcript).then((polished) => {
+          void fetchPolished(transcript).then((polished) => {
             setSegments((s) => s.map((seg) => (seg.id === newId ? { ...seg, polished } : seg)));
           });
           return [...prev, { id: newId, text: transcript, isFinal: true }];

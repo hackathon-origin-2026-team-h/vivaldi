@@ -1,5 +1,5 @@
-import { polishTranscript } from "@/lib/gemini";
 import { NextResponse } from "next/server";
+import { polishTranscript } from "@/lib/gemini";
 
 export async function POST(request: Request) {
   const body = (await request.json()) as { text?: string };
