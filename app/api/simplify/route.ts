@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { simplify } from "@/lib/simplify";
+import { defaultPipeline, runPipeline } from "@/lib/llm";
 
 export async function POST(request: Request) {
-  let body: { text?: string };
+  let body: { text?: string; steps?: string[] };
 
   try {
-    body = (await request.json()) as { text?: string };
+    body = (await request.json()) as { text?: string; steps?: string[] };
   } catch (err) {
     console.error("Invalid JSON body:", err);
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
@@ -17,11 +17,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "text is required" }, { status: 400 });
   }
 
+  // Build pipeline: filter defaultPipeline by requested step names (if provided),
+  // and override enabled flag accordingly.
+  const pipeline =
+    body.steps && body.steps.length > 0
+      ? defaultPipeline.map((step) => ({
+          ...step,
+          enabled: (body.steps as string[]).includes(step.name),
+        }))
+      : defaultPipeline;
+
   try {
-    const result = await simplify(text);
+    const result = await runPipeline(text, pipeline);
     return NextResponse.json(result);
   } catch (err) {
-    console.error("simplify error:", err);
-    return NextResponse.json({ error: "Failed to simplify text" }, { status: 500 });
+    console.error("pipeline error:", err);
+    return NextResponse.json({ error: "Failed to process text" }, { status: 500 });
   }
 }
