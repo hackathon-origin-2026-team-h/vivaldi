@@ -1,13 +1,7 @@
 import { NextResponse } from "next/server";
-import * as v from "valibot";
-import { parseBody } from "@/lib/api";
+import { handleApiError, parseBody, TextWithPersonaBodySchema } from "@/lib/api";
 import { extractText, getClient } from "@/lib/claude";
 import { parsePersona, type UserPersona } from "@/lib/persona";
-
-const BodySchema = v.object({
-  text: v.pipe(v.string(), v.nonEmpty("text is required")),
-  userPersona: v.optional(v.unknown()),
-});
 
 function summarizePersona(persona: UserPersona): string {
   const parts: string[] = [];
@@ -25,7 +19,7 @@ function summarizePersona(persona: UserPersona): string {
 }
 
 export async function POST(request: Request) {
-  const result = await parseBody(request, BodySchema);
+  const result = await parseBody(request, TextWithPersonaBodySchema);
   if (!result.ok) return result.response;
 
   const { text, userPersona } = result.data;
@@ -57,7 +51,6 @@ ${text}
     const personalized = extractText(response) || text;
     return NextResponse.json({ personalized });
   } catch (err) {
-    console.error("personalize error:", err);
-    return NextResponse.json({ error: "Failed to personalize text" }, { status: 500 });
+    return handleApiError("personalize text", err);
   }
 }

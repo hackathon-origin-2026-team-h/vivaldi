@@ -8,6 +8,10 @@ const BodySchema = v.object({
   polishedText: v.pipe(v.string(), v.nonEmpty("polishedText is required")),
 });
 
+function isForeignKeyError(err: unknown): boolean {
+  return typeof err === "object" && err !== null && "code" in err && (err as { code: unknown }).code === "P2003";
+}
+
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
@@ -16,14 +20,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const { rawText, polishedText } = result.data;
 
-  const session = await prisma.talkSession.findUnique({ where: { id } });
-  if (!session) {
-    return NextResponse.json({ error: "Session not found" }, { status: 404 });
+  try {
+    const segment = await prisma.transcriptSegment.create({
+      data: { sessionId: id, rawText, polishedText },
+    });
+    return NextResponse.json(segment, { status: 201 });
+  } catch (err) {
+    if (isForeignKeyError(err)) {
+      return NextResponse.json({ error: "Session not found" }, { status: 404 });
+    }
+    throw err;
   }
-
-  const segment = await prisma.transcriptSegment.create({
-    data: { sessionId: id, rawText, polishedText },
-  });
-
-  return NextResponse.json(segment, { status: 201 });
 }

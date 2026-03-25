@@ -4,9 +4,6 @@ import { POST } from "./route";
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
-    talkSession: {
-      findUnique: vi.fn(),
-    },
     transcriptSegment: {
       create: vi.fn(),
     },
@@ -15,7 +12,6 @@ vi.mock("@/lib/prisma", () => ({
 
 import { prisma } from "@/lib/prisma";
 
-const mockFindUnique = () => vi.mocked(prisma.talkSession.findUnique);
 const mockCreate = () => vi.mocked(prisma.transcriptSegment.create);
 
 const makeRequest = (body: unknown) =>
@@ -33,11 +29,6 @@ describe("POST /api/sessions/[id]/segments", () => {
   });
 
   it("セグメントを作成して 201 を返す", async () => {
-    mockFindUnique().mockResolvedValueOnce({
-      id: "abc",
-      status: "DURING",
-      createdAt: new Date(),
-    } as never);
     mockCreate().mockResolvedValueOnce({
       id: 1,
       sessionId: "abc",
@@ -72,14 +63,13 @@ describe("POST /api/sessions/[id]/segments", () => {
   });
 
   it("存在しないセッションは 404 を返す", async () => {
-    mockFindUnique().mockResolvedValueOnce(null);
+    mockCreate().mockRejectedValueOnce(Object.assign(new Error("FK constraint failed"), { code: "P2003" }));
 
     const res = await POST(makeRequest({ rawText: "えっと", polishedText: "今日は" }), params);
     const body = await res.json();
 
     expect(res.status).toBe(404);
     expect(body).toHaveProperty("error");
-    expect(mockCreate()).not.toHaveBeenCalled();
   });
 
   it("不正な JSON は 400 を返す", async () => {
