@@ -1,4 +1,5 @@
-import { getClient } from "@/lib/claude";
+import * as v from "valibot";
+import { getClient, parseJsonResponse } from "@/lib/claude";
 
 const MODEL = "claude-sonnet-4-20250514";
 
@@ -39,24 +40,10 @@ async function removeFillersStep(text: string): Promise<string> {
   return result !== "" ? result : text;
 }
 
-type SimplifyResponse = {
-  text: string;
-  terms: Term[];
-};
-
-// Parses the simplify JSON response and returns both text and terms
-function parseSimplifyResponse(raw: string): SimplifyResponse {
-  const cleaned = raw
-    .replace(/^```json\s*/i, "")
-    .replace(/^```\s*/i, "")
-    .replace(/\s*```$/, "")
-    .trim();
-  const parsed = JSON.parse(cleaned) as { text: string; terms: { word: string; explanation: string }[] };
-  return {
-    text: parsed.text,
-    terms: parsed.terms ?? [],
-  };
-}
+const SimplifyResponseSchema = v.object({
+  text: v.string(),
+  terms: v.array(v.object({ word: v.string(), explanation: v.string() })),
+});
 
 // Holds terms extracted during the simplify step so runPipeline can access them
 let _lastSimplifyTerms: Term[] = [];
@@ -73,7 +60,7 @@ async function simplifyStep(text: string): Promise<string> {
   const block = response.content.find((b) => b.type === "text");
   if (!block || block.type !== "text") return text;
 
-  const parsed = parseSimplifyResponse(block.text);
+  const parsed = parseJsonResponse(SimplifyResponseSchema, block.text);
   _lastSimplifyTerms = parsed.terms;
   return parsed.text;
 }
