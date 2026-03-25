@@ -1,7 +1,7 @@
 import * as v from "valibot";
 import { extractText, getClient, parseJsonResponse } from "@/lib/claude";
 
-const MODEL = "claude-sonnet-4-20250514";
+const MODEL = "claude-haiku-4-5";
 
 export type PipelineStep = {
   name: string;
