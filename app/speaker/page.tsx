@@ -75,25 +75,35 @@ export default function SpeakerPage() {
       socketRef.current = socket;
 
       socket.on("open", () => {
-        setStatus("recording");
+        try {
+          setStatus("recording");
 
-        const audioCtx = new AudioContext({ sampleRate: 16000 });
-        audioCtxRef.current = audioCtx;
-        const source = audioCtx.createMediaStreamSource(stream);
-        // ScriptProcessorNode is deprecated but broadly supported; AudioWorklet requires
-        // a separate worker file which adds complexity for this use case.
-        // biome-ignore lint/suspicious/noExplicitAny: ScriptProcessor type lacks createScriptProcessor signature in some lib versions
-        const processor = (audioCtx as unknown as any).createScriptProcessor(4096, 1, 1) as ScriptProcessorNode;
-        processorRef.current = processor;
+          const audioCtx = new AudioContext({ sampleRate: 16000 });
+          audioCtxRef.current = audioCtx;
+          const source = audioCtx.createMediaStreamSource(stream);
+          // ScriptProcessorNode is deprecated but broadly supported; AudioWorklet requires
+          // a separate worker file which adds complexity for this use case.
+          // biome-ignore lint/suspicious/noExplicitAny: ScriptProcessor type lacks createScriptProcessor signature in some lib versions
+          const processor = (audioCtx as unknown as any).createScriptProcessor(4096, 1, 1) as ScriptProcessorNode;
+          processorRef.current = processor;
 
-        processor.onaudioprocess = (e: AudioProcessingEvent) => {
-          const channelData = e.inputBuffer.getChannelData(0);
-          const int16 = float32ToInt16(channelData);
-          socket.sendMedia(int16.buffer);
-        };
+          processor.onaudioprocess = (e: AudioProcessingEvent) => {
+            const channelData = e.inputBuffer.getChannelData(0);
+            const int16 = float32ToInt16(channelData);
+            socket.sendMedia(int16.buffer);
+          };
 
-        source.connect(processor);
-        processor.connect(audioCtx.destination);
+          source.connect(processor);
+          processor.connect(audioCtx.destination);
+        } catch (error) {
+          console.error("Failed to initialize audio processing after socket open:", error);
+          setError(
+            error instanceof Error
+              ? error.message
+              : "An error occurred while initializing audio recording."
+          );
+          stopRecording();
+        }
       });
 
       socket.on("message", (data) => {
