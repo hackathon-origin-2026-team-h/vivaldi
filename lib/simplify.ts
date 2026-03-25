@@ -33,10 +33,7 @@ export async function simplify(text: string): Promise<SimplifiedResult> {
     messages: [{ role: "user", content: text }],
   });
 
-  const parsed = parseJsonResponse(
-    SimplifyResponseSchema,
-    extractText(message),
-  );
+  const parsed = parseJsonResponse(SimplifyResponseSchema, extractText(message));
 
   return {
     original: text,
