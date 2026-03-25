@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { createMock } = vi.hoisted(() => ({ createMock: vi.fn() }));
+const { streamMock } = vi.hoisted(() => ({ streamMock: vi.fn() }));
 
 vi.mock("@anthropic-ai/sdk", () => ({
   default: class {
-    messages = { create: createMock };
+    messages = { stream: streamMock };
   },
 }));
 
@@ -15,17 +15,20 @@ const VALID_JSON = JSON.stringify({
   terms: [{ word: "専門用語", explanation: "わかりやすい説明" }],
 });
 
+function makeStream(text: string) {
+  const message = { content: [{ type: "text", text }] };
+  return { finalMessage: () => Promise.resolve(message) };
+}
+
 describe("simplify", () => {
   beforeEach(() => {
-    createMock.mockReset();
+    streamMock.mockReset();
     process.env.ANTHROPIC_API_KEY = "test-key";
     (globalThis as Record<string, unknown>)._claude = undefined;
   });
 
   it("正常なJSONレスポンスをパースして返す", async () => {
-    createMock.mockResolvedValue({
-      content: [{ type: "text", text: VALID_JSON }],
-    });
+    streamMock.mockReturnValue(makeStream(VALID_JSON));
 
     const result = await simplify("難しいテキスト");
 
@@ -35,9 +38,7 @@ describe("simplify", () => {
   });
 
   it("マークダウンコードブロックで囲まれたJSONも正しくパースする", async () => {
-    createMock.mockResolvedValue({
-      content: [{ type: "text", text: "```json\n" + VALID_JSON + "\n```" }],
-    });
+    streamMock.mockReturnValue(makeStream(`\`\`\`json\n${VALID_JSON}\n\`\`\``));
 
     const result = await simplify("難しいテキスト");
 
@@ -50,17 +51,13 @@ describe("simplify", () => {
   });
 
   it("不正なJSONの場合エラーをthrowする", async () => {
-    createMock.mockResolvedValue({
-      content: [{ type: "text", text: "not json" }],
-    });
+    streamMock.mockReturnValue(makeStream("not json"));
 
     await expect(simplify("テスト")).rejects.toThrow(SyntaxError);
   });
 
   it("JSONの構造がスキーマに違反する場合エラーをthrowする", async () => {
-    createMock.mockResolvedValue({
-      content: [{ type: "text", text: JSON.stringify({ simplified: 123, terms: [] }) }],
-    });
+    streamMock.mockReturnValue(makeStream(JSON.stringify({ simplified: 123, terms: [] })));
 
     await expect(simplify("テスト")).rejects.toThrow();
   });

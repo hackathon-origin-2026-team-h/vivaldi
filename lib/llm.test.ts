@@ -1,21 +1,22 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { createMock } = vi.hoisted(() => ({ createMock: vi.fn() }));
+const { streamMock } = vi.hoisted(() => ({ streamMock: vi.fn() }));
 
 vi.mock("@anthropic-ai/sdk", () => ({
   default: class {
-    messages = { create: createMock };
+    messages = { stream: streamMock };
   },
 }));
 
 import { defaultPipeline, runPipeline } from "./llm";
 
-function textResponse(text: string) {
-  return { content: [{ type: "text", text }] };
+function makeStream(text: string) {
+  const message = { content: [{ type: "text", text }] };
+  return { finalMessage: () => Promise.resolve(message) };
 }
 
 beforeEach(() => {
-  createMock.mockReset();
+  streamMock.mockReset();
   process.env.ANTHROPIC_API_KEY = "test-key";
   (globalThis as Record<string, unknown>)._claude = undefined;
 });
@@ -54,7 +55,7 @@ describe("runPipeline", () => {
       text: "やさしい文章",
       terms: [{ word: "専門用語", explanation: "わかりやすい説明" }],
     });
-    createMock.mockResolvedValue(textResponse(simplifyJson));
+    streamMock.mockReturnValue(makeStream(simplifyJson));
 
     const steps = [defaultPipeline.find((s) => s.name === "simplify")!];
     const result = await runPipeline("難しいテキスト", steps);
@@ -81,7 +82,7 @@ describe("runPipeline", () => {
 
 describe("removeFillers ステップ", () => {
   it("Claude のレスポンスをそのまま output にする", async () => {
-    createMock.mockResolvedValue(textResponse("言い淀みを除去した文章"));
+    streamMock.mockReturnValue(makeStream("言い淀みを除去した文章"));
 
     const step = defaultPipeline.find((s) => s.name === "removeFillers")!;
     const result = await runPipeline("えーと、難しいテキスト", [step]);
@@ -90,7 +91,7 @@ describe("removeFillers ステップ", () => {
   });
 
   it("Claude が空文字を返した場合は入力をフォールバックとして返す", async () => {
-    createMock.mockResolvedValue(textResponse(""));
+    streamMock.mockReturnValue(makeStream(""));
 
     const step = defaultPipeline.find((s) => s.name === "removeFillers")!;
     const result = await runPipeline("入力テキスト", [step]);
@@ -106,7 +107,7 @@ describe("translate ステップ", () => {
   });
 
   it("enabled にすると Claude のレスポンスを返す", async () => {
-    createMock.mockResolvedValue(textResponse("Translated text"));
+    streamMock.mockReturnValue(makeStream("Translated text"));
 
     const step = { ...defaultPipeline.find((s) => s.name === "translate")!, enabled: true };
     const result = await runPipeline("日本語テキスト", [step]);
@@ -118,7 +119,7 @@ describe("translate ステップ", () => {
 describe("simplify ステップ — JSON パース", () => {
   it("マークダウンコードブロックで囲まれた JSON も正しくパースする", async () => {
     const json = JSON.stringify({ text: "平易な文", terms: [] });
-    createMock.mockResolvedValue(textResponse("```json\n" + json + "\n```"));
+    streamMock.mockReturnValue(makeStream(`\`\`\`json\n${json}\n\`\`\``));
 
     const step = defaultPipeline.find((s) => s.name === "simplify")!;
     const result = await runPipeline("テスト", [step]);
@@ -128,7 +129,7 @@ describe("simplify ステップ — JSON パース", () => {
   });
 
   it("不正な JSON の場合エラーをthrowする", async () => {
-    createMock.mockResolvedValue(textResponse("not json"));
+    streamMock.mockReturnValue(makeStream("not json"));
 
     const step = defaultPipeline.find((s) => s.name === "simplify")!;
     await expect(runPipeline("テスト", [step])).rejects.toThrow(SyntaxError);

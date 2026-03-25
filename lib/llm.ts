@@ -1,7 +1,7 @@
 import * as v from "valibot";
 import { extractText, getClient, parseJsonResponse } from "@/lib/claude";
 
-const MODEL = "claude-sonnet-4-20250514";
+const MODEL = "claude-haiku-4-5-20251001";
 
 export type PipelineStep = {
   name: string;
@@ -26,20 +26,22 @@ export type PipelineResult = {
   terms: Term[];
 };
 
-async function callLLM(system: string, text: string): Promise<string> {
-  const response = await getClient().messages.create({
+async function callLLM(system: string, text: string, maxTokens: number): Promise<string> {
+  const stream = getClient().messages.stream({
     model: MODEL,
-    max_tokens: 2048,
+    max_tokens: maxTokens,
     system,
     messages: [{ role: "user", content: text }],
   });
-  return extractText(response) || text;
+  const message = await stream.finalMessage();
+  return extractText(message) || text;
 }
 
 async function removeFillersStep(text: string): Promise<string> {
   return callLLM(
     "「えー」「あの」「まあ」「えっと」などの言い淀みを除去してください。意味のある言葉は一切変えないこと。テキストのみ返してください（JSON不要）。",
     text,
+    64,
   );
 }
 
@@ -49,21 +51,22 @@ const SimplifyResponseSchema = v.object({
 });
 
 async function simplifyStep(text: string): Promise<{ output: string; terms: Term[] }> {
-  const response = await getClient().messages.create({
+  const stream = getClient().messages.stream({
     model: MODEL,
-    max_tokens: 2048,
+    max_tokens: 256,
     system:
       '専門用語・難しい言葉を小学生でもわかる言葉に言い換えてください。元の文章の意味・ニュアンスを変えないこと。以下のJSON形式のみで返してください（マークダウン・前置きテキスト不要）:\n{"text": "平易化された文章", "terms": [{"word": "専門用語", "explanation": "平易化された説明"}]}',
     messages: [{ role: "user", content: text }],
   });
-  const raw = extractText(response);
+  const message = await stream.finalMessage();
+  const raw = extractText(message);
   if (!raw) return { output: text, terms: [] };
   const parsed = parseJsonResponse(SimplifyResponseSchema, raw);
   return { output: parsed.text, terms: parsed.terms };
 }
 
 async function translateStep(text: string): Promise<string> {
-  return callLLM("日本語を自然な英語に翻訳してください。テキストのみ返してください（JSON不要）。", text);
+  return callLLM("日本語を自然な英語に翻訳してください。テキストのみ返してください（JSON不要）。", text, 512);
 }
 
 export async function runPipeline(text: string, steps: PipelineStep[]): Promise<PipelineResult> {

@@ -22,16 +22,28 @@ export type SimplifiedResult = {
   terms: Term[];
 };
 
-const SYSTEM_PROMPT = `専門用語・難しい言葉を小学生でもわかる言葉に言い換えてください。元の文章の意味・ニュアンスを変えないこと。専門用語と平易化した説明のペアも抽出してください。以下のJSON形式のみで返してください（マークダウン・前置きテキスト不要）:
-{"simplified": "平易化された文章", "terms": [{"word": "専門用語", "explanation": "平易化された説明"}]}`;
+const SYSTEM_PROMPT = `あなたは文章を平易化するアシスタントです。
+以下のJSON形式のみで返してください。余分なテキスト不要。
+
+{"simplified": "平易化された文章", "terms": [{"word": "専門用語", "explanation": "わかりやすい説明"}]}
+
+ルール:
+- 専門用語を小学生でもわかる言葉に言い換える
+- 意味を変えない
+- 専門用語がなければtermsは空配列`;
 
 export async function simplify(text: string): Promise<SimplifiedResult> {
-  const message = await getClient().messages.create({
-    model: "claude-sonnet-4-6",
-    max_tokens: 2048,
+  const start = Date.now();
+
+  const stream = getClient().messages.stream({
+    model: "claude-haiku-4-5-20251001",
+    max_tokens: 256,
     system: SYSTEM_PROMPT,
     messages: [{ role: "user", content: text }],
   });
+
+  const message = await stream.finalMessage();
+  console.log(`[simplify] ${Date.now() - start}ms`);
 
   const parsed = parseJsonResponse(SimplifyResponseSchema, extractText(message));
 
