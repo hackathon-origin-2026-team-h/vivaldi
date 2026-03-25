@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { use, useCallback, useEffect, useRef, useState } from "react";
 import { defaultPersona, parsePersona, type UserPersona } from "@/lib/persona";
 
 type SessionStatus = "BEFORE" | "DURING" | "AFTER";
@@ -47,8 +47,8 @@ async function fetchPersonalized(text: string, userPersona: UserPersona): Promis
   }
 }
 
-export default function AttendeePage({ params }: { params: { sessionId: string } }) {
-  const { sessionId } = params;
+export default function AttendeePage({ params }: { params: Promise<{ sessionId: string }> }) {
+  const { sessionId } = use(params);
 
   const [sessionStatus, setSessionStatus] = useState<SessionStatus | null>(null);
   const [segments, setSegments] = useState<DisplaySegment[]>([]);

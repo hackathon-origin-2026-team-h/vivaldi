@@ -15,7 +15,7 @@ vi.mock("@/lib/prisma", () => ({
 
 import { prisma } from "@/lib/prisma";
 
-const params = { params: { id: "abc" } };
+const params = { params: Promise.resolve({ id: "abc" }) };
 
 describe("GET /api/sessions/[id]/stream", () => {
   it("存在しないセッションは 404 を返す", async () => {

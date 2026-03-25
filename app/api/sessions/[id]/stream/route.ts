@@ -1,8 +1,9 @@
 import { prisma } from "@/lib/prisma";
 
-export async function GET(req: Request, { params }: { params: { id: string } }) {
+export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const session = await prisma.talkSession.findUnique({
-    where: { id: params.id },
+    where: { id },
   });
   if (!session) {
     return new Response(JSON.stringify({ error: "Session not found" }), {
@@ -25,7 +26,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
         if (aborted) return;
         try {
           const segments = await prisma.transcriptSegment.findMany({
-            where: { sessionId: params.id, id: { gt: lastSegmentId } },
+            where: { sessionId: id, id: { gt: lastSegmentId } },
             orderBy: { id: "asc" },
           });
 
@@ -36,7 +37,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
 
           // Also check for status changes
           const current = await prisma.talkSession.findUnique({
-            where: { id: params.id },
+            where: { id },
             select: { status: true },
           });
           if (current && current.status !== session.status) {
