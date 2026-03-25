@@ -25,7 +25,7 @@ const makeRequest = (body: unknown) =>
     body: JSON.stringify(body),
   });
 
-const params = { params: { id: "abc" } };
+const params = { params: Promise.resolve({ id: "abc" }) };
 
 describe("POST /api/sessions/[id]/segments", () => {
   beforeEach(() => {

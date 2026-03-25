@@ -25,12 +25,12 @@
 - `app/speaker/page.tsx` — Deepgramによるリアルタイム音声書き起こしUI
 - `app/api/transcribe/token/route.ts` — Deepgram一時トークン発行
 - `app/api/polish/route.ts` → `lib/gemini.ts` — Geminiによる書き起こしの整形（言い淀み除去）
-
-### 未実装（要実装）
-
 - トークセッションの作成・管理（DB）
 - 聴講者ビュー（`/[sessionId]/page.tsx`）
 - リアルタイム更新（SSE）
+
+### 未実装（要実装）
+
 - 個人向け意訳機能（パーソナライズ）
 - フィードバック → ユーザーペルソナ更新ループ
 - QRコード生成・表示

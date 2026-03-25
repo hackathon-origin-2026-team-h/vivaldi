@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-export async function POST(request: Request, { params }: { params: { id: string } }) {
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   let body: { rawText?: string; polishedText?: string };
   try {
     body = (await request.json()) as { rawText?: string; polishedText?: string };
@@ -15,14 +16,14 @@ export async function POST(request: Request, { params }: { params: { id: string 
   }
 
   const session = await prisma.talkSession.findUnique({
-    where: { id: params.id },
+    where: { id },
   });
   if (!session) {
     return NextResponse.json({ error: "Session not found" }, { status: 404 });
   }
 
   const segment = await prisma.transcriptSegment.create({
-    data: { sessionId: params.id, rawText, polishedText },
+    data: { sessionId: id, rawText, polishedText },
   });
 
   return NextResponse.json(segment, { status: 201 });
