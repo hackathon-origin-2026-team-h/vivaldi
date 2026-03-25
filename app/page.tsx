@@ -1,8 +1,17 @@
+import { Kosugi_Maru } from "next/font/google";
 import Link from "next/link";
+
+const kosugiMaru = Kosugi_Maru({
+  weight: "400",
+  subsets: ["latin"],
+  display: "swap",
+});
 
 export default function Home() {
   return (
-    <main className="min-h-screen bg-gradient-to-b from-slate-50 to-white flex flex-col items-center justify-center px-6 py-16">
+    <main
+      className={`${kosugiMaru.className} min-h-screen bg-gradient-to-b from-slate-50 to-white flex flex-col items-center justify-center px-6 py-16`}
+    >
       <div className="max-w-2xl w-full mx-auto flex flex-col items-center gap-12">
         {/* Hero */}
         <div className="text-center flex flex-col items-center gap-4">

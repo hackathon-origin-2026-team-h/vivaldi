@@ -1,8 +1,15 @@
 "use client";
 
 import { DeepgramClient } from "@deepgram/sdk";
+import { Kosugi_Maru } from "next/font/google";
 import QRCode from "qrcode";
 import { useCallback, useEffect, useRef, useState } from "react";
+
+const kosugiMaru = Kosugi_Maru({
+  weight: "400",
+  subsets: ["latin"],
+  display: "swap",
+});
 
 type Status = "idle" | "connecting" | "recording";
 
@@ -77,6 +84,16 @@ export default function SpeakerPage() {
   const socketRef = useRef<{ sendMedia: (d: ArrayBufferLike) => void; close: () => void } | null>(null);
   const idCounterRef = useRef(0);
   const sessionIdRef = useRef<string | null>(null);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Clean up copy timer on unmount
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current !== null) {
+        clearTimeout(copyTimerRef.current);
+      }
+    };
+  }, []);
 
   // Create session on mount
   useEffect(() => {
@@ -239,7 +256,13 @@ export default function SpeakerPage() {
     try {
       await navigator.clipboard.writeText(audienceUrl);
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      if (copyTimerRef.current !== null) {
+        clearTimeout(copyTimerRef.current);
+      }
+      copyTimerRef.current = setTimeout(() => {
+        setCopied(false);
+        copyTimerRef.current = null;
+      }, 2000);
     } catch {
       // fallback: silently ignore clipboard errors
     }
@@ -250,12 +273,14 @@ export default function SpeakerPage() {
   const isIdle = status === "idle";
 
   return (
-    <main className="min-h-screen bg-slate-50 flex flex-col items-center justify-center px-6 py-12">
+    <main
+      className={`${kosugiMaru.className} min-h-screen bg-slate-50 flex flex-col items-center justify-center px-6 py-12`}
+    >
       <div className="max-w-sm w-full mx-auto flex flex-col items-center gap-8">
         {/* Header */}
         <div className="text-center">
           <h1 className="text-2xl font-bold text-slate-900">発表者コントロール</h1>
-          <p className="text-sm text-slate-500 mt-1">QRコードを参加者に共有して録音を開始してください</p>
+          <p className="text-sm text-slate-500 mt-1">QRコードを参加者に共有して発表を開始してください</p>
         </div>
 
         {/* QR Code card */}
@@ -358,7 +383,7 @@ export default function SpeakerPage() {
                 isRecording ? "text-red-700" : isConnecting ? "text-amber-700" : "text-slate-600",
               ].join(" ")}
             >
-              {isRecording ? "録音中" : isConnecting ? "接続中…" : "待機中"}
+              {isRecording ? "発表中" : isConnecting ? "接続中…" : "待機中"}
             </p>
             <p
               className={[
@@ -370,7 +395,7 @@ export default function SpeakerPage() {
                 ? "音声をリアルタイムで書き起こしています"
                 : isConnecting
                   ? "マイクとサーバーに接続しています"
-                  : "「録音開始」を押すと配信が始まります"}
+                  : "「発表開始」を押すと配信が始まります"}
             </p>
           </div>
         </div>
@@ -394,7 +419,7 @@ export default function SpeakerPage() {
                 : "bg-blue-600 hover:bg-blue-700 active:bg-blue-800",
           ].join(" ")}
         >
-          {isConnecting ? "接続中…" : isRecording ? "録音を停止する" : "録音を開始する"}
+          {isConnecting ? "接続中…" : isRecording ? "発表を終了する" : "発表を開始する"}
         </button>
 
         {/* Segment count hint (no transcript text shown) */}
