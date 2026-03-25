@@ -76,7 +76,7 @@ export default function Home() {
             <div className="pt-1.5">
               <p className="font-bold text-stone-800 text-sm">話す</p>
               <p className="text-xs text-stone-500 mt-0.5 leading-relaxed">
-発表を開始すると、あなたの発表の文字起こしがリアルタイムで聴講者に伝わります。
+                発表を開始すると、あなたの発表の文字起こしがリアルタイムで聴講者に伝わります。
               </p>
             </div>
           </div>
