@@ -32,4 +32,6 @@ model TranscriptSegment {
   rawText      String
   polishedText String
   createdAt    DateTime    @default(now())
+
+  @@index([sessionId, id])
 }
