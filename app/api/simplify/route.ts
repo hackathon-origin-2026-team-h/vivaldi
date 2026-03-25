@@ -10,13 +10,26 @@ export async function POST(request: Request) {
   const result = await parseBody(request, BodySchema);
   if (!result.ok) return result.response;
 
+  // Validate steps: must be an array of strings if provided.
+  if (
+    body.steps !== undefined &&
+    (!Array.isArray(body.steps) || !body.steps.every((s) => typeof s === "string"))
+  ) {
+    return NextResponse.json(
+      { error: "steps must be an array of strings" },
+      { status: 400 },
+    );
+  }
+
+  const steps = Array.isArray(body.steps) ? body.steps : undefined;
+
   // Build pipeline: filter defaultPipeline by requested step names (if provided),
   // and override enabled flag accordingly.
   const pipeline =
-    body.steps && body.steps.length > 0
+    steps && steps.length > 0
       ? defaultPipeline.map((step) => ({
           ...step,
-          enabled: (body.steps as string[]).includes(step.name),
+          enabled: steps.includes(step.name),
         }))
       : defaultPipeline;
 
