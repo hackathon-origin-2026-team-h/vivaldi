@@ -14,6 +14,14 @@ function textResponse(text: string) {
   return { content: [{ type: "text", text }] };
 }
 
+function getPipelineStep(name: (typeof defaultPipeline)[number]["name"]) {
+  const step = defaultPipeline.find((candidate) => candidate.name === name);
+  if (!step) {
+    throw new Error(`Missing pipeline step: ${name}`);
+  }
+  return step;
+}
+
 beforeEach(() => {
   createMock.mockReset();
   process.env.ANTHROPIC_API_KEY = "test-key";
@@ -56,7 +64,7 @@ describe("runPipeline", () => {
     });
     createMock.mockResolvedValue(textResponse(simplifyJson));
 
-    const steps = [defaultPipeline.find((s) => s.name === "simplify")!];
+    const steps = [getPipelineStep("simplify")];
     const result = await runPipeline("難しいテキスト", steps);
 
     expect(result.output).toBe("やさしい文章");
@@ -64,7 +72,7 @@ describe("runPipeline", () => {
   });
 
   it("simplify ステップが disabled の場合 terms は空配列", async () => {
-    const steps = [{ ...defaultPipeline.find((s) => s.name === "simplify")!, enabled: false }];
+    const steps = [{ ...getPipelineStep("simplify"), enabled: false }];
     const result = await runPipeline("テスト", steps);
 
     expect(result.terms).toEqual([]);
@@ -83,7 +91,7 @@ describe("removeFillers ステップ", () => {
   it("Claude のレスポンスをそのまま output にする", async () => {
     createMock.mockResolvedValue(textResponse("言い淀みを除去した文章"));
 
-    const step = defaultPipeline.find((s) => s.name === "removeFillers")!;
+    const step = getPipelineStep("removeFillers");
     const result = await runPipeline("えーと、難しいテキスト", [step]);
 
     expect(result.output).toBe("言い淀みを除去した文章");
@@ -92,7 +100,7 @@ describe("removeFillers ステップ", () => {
   it("Claude が空文字を返した場合は入力をフォールバックとして返す", async () => {
     createMock.mockResolvedValue(textResponse(""));
 
-    const step = defaultPipeline.find((s) => s.name === "removeFillers")!;
+    const step = getPipelineStep("removeFillers");
     const result = await runPipeline("入力テキスト", [step]);
 
     expect(result.output).toBe("入力テキスト");
@@ -108,7 +116,7 @@ describe("translate ステップ", () => {
   it("enabled にすると Claude のレスポンスを返す", async () => {
     createMock.mockResolvedValue(textResponse("Translated text"));
 
-    const step = { ...defaultPipeline.find((s) => s.name === "translate")!, enabled: true };
+    const step = { ...getPipelineStep("translate"), enabled: true };
     const result = await runPipeline("日本語テキスト", [step]);
 
     expect(result.output).toBe("Translated text");
@@ -118,9 +126,9 @@ describe("translate ステップ", () => {
 describe("simplify ステップ — JSON パース", () => {
   it("マークダウンコードブロックで囲まれた JSON も正しくパースする", async () => {
     const json = JSON.stringify({ text: "平易な文", terms: [] });
-    createMock.mockResolvedValue(textResponse("```json\n" + json + "\n```"));
+    createMock.mockResolvedValue(textResponse(`\`\`\`json\n${json}\n\`\`\``));
 
-    const step = defaultPipeline.find((s) => s.name === "simplify")!;
+    const step = getPipelineStep("simplify");
     const result = await runPipeline("テスト", [step]);
 
     expect(result.output).toBe("平易な文");
@@ -130,7 +138,7 @@ describe("simplify ステップ — JSON パース", () => {
   it("不正な JSON の場合エラーをthrowする", async () => {
     createMock.mockResolvedValue(textResponse("not json"));
 
-    const step = defaultPipeline.find((s) => s.name === "simplify")!;
+    const step = getPipelineStep("simplify");
     await expect(runPipeline("テスト", [step])).rejects.toThrow(SyntaxError);
   });
 });

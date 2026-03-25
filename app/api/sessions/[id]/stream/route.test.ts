@@ -63,7 +63,12 @@ describe("GET /api/sessions/[id]/stream", () => {
     const res = await GET(req, params);
     controller.abort();
 
-    const reader = res.body!.getReader();
+    expect(res.body).not.toBeNull();
+    if (!res.body) {
+      throw new Error("Expected response body for SSE stream");
+    }
+
+    const reader = res.body.getReader();
     const { value } = await reader.read();
     const text = new TextDecoder().decode(value);
 
