@@ -164,7 +164,13 @@ export default function AttendeePage({ params }: { params: Promise<{ sessionId: 
         setSegments((prev) =>
           prev.map((s) =>
             s.id === segmentId
-              ? { ...s, isFeedbackPending: false, feedbackDone: true, feedbackInference: body.inference, isRepersonalizing: true }
+              ? {
+                  ...s,
+                  isFeedbackPending: false,
+                  feedbackDone: true,
+                  feedbackInference: body.inference,
+                  isRepersonalizing: true,
+                }
               : s,
           ),
         );
@@ -179,9 +185,7 @@ export default function AttendeePage({ params }: { params: Promise<{ sessionId: 
               ),
             );
           } else {
-            setSegments((prev) =>
-              prev.map((s) => (s.id === segmentId ? { ...s, isRepersonalizing: false } : s)),
-            );
+            setSegments((prev) => prev.map((s) => (s.id === segmentId ? { ...s, isRepersonalizing: false } : s)));
           }
         });
       } else {
