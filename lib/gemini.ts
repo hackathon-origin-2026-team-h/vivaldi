@@ -29,5 +29,6 @@ export async function polishTranscript(rawText: string): Promise<string> {
     ],
   });
 
-  return response.text ?? rawText;
+  const normalizedText = response.text?.trim() ?? "";
+  return normalizedText !== "" ? normalizedText : rawText;
 }
