@@ -36,7 +36,7 @@ describe("simplify", () => {
 
   it("マークダウンコードブロックで囲まれたJSONも正しくパースする", async () => {
     createMock.mockResolvedValue({
-      content: [{ type: "text", text: "```json\n" + VALID_JSON + "\n```" }],
+      content: [{ type: "text", text: `\`\`\`json\n${VALID_JSON}\n\`\`\`` }],
     });
 
     const result = await simplify("難しいテキスト");

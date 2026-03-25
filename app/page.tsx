@@ -1,4 +1,4 @@
-import { Syne, Kosugi_Maru, Unbounded } from "next/font/google";
+import { Kosugi_Maru, Syne, Unbounded } from "next/font/google";
 
 const syne = Syne({ subsets: ["latin"], weight: ["400", "700", "800"] });
 const zen = Kosugi_Maru({ subsets: ["latin"], weight: ["400"] });
@@ -120,7 +120,9 @@ export default function Home() {
             <p className={zen.className} style={{ fontSize: 16, color: "rgba(255,255,255,0.65)", lineHeight: 1.8 }}>
               ふむむ、わかった。専門用語を、その場で、あなたの言葉に。
             </p>
-            <a href="/speaker" className={`btn-orange ${syne.className}`} style={{ flexShrink: 0 }}>始める →</a>
+            <a href="/speaker" className={`btn-orange ${syne.className}`} style={{ flexShrink: 0 }}>
+              始める →
+            </a>
           </div>
         </div>
       </section>

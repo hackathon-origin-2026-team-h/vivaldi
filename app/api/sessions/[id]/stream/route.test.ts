@@ -66,7 +66,7 @@ describe("GET /api/sessions/[id]/stream", () => {
     const res = await GET(req, params);
     controller.abort();
 
-    const reader = res.body!.getReader();
+    const reader = res.body?.getReader();
     const { value } = await reader.read();
     const text = new TextDecoder().decode(value);
 

@@ -118,7 +118,7 @@ describe("translate ステップ", () => {
 describe("simplify ステップ — JSON パース", () => {
   it("マークダウンコードブロックで囲まれた JSON も正しくパースする", async () => {
     const json = JSON.stringify({ text: "平易な文", terms: [] });
-    createMock.mockResolvedValue(textResponse("```json\n" + json + "\n```"));
+    createMock.mockResolvedValue(textResponse(`\`\`\`json\n${json}\n\`\`\``));
 
     const step = defaultPipeline.find((s) => s.name === "simplify")!;
     const result = await runPipeline("テスト", [step]);
