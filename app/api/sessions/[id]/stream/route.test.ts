@@ -66,7 +66,8 @@ describe("GET /api/sessions/[id]/stream", () => {
     const res = await GET(req, params);
     controller.abort();
 
-    const reader = res.body?.getReader();
+    // biome-ignore lint/style/noNonNullAssertion: res.body is always present in this test
+    const reader = res.body!.getReader();
     const { value } = await reader.read();
     const text = new TextDecoder().decode(value);
 
