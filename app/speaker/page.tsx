@@ -57,10 +57,11 @@ export default function SpeakerPage() {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
       streamRef.current = stream;
 
-      const client = new DeepgramClient({ apiKey: token });
+      // access_token from /v1/auth/grant uses Bearer scheme
+      const client = new DeepgramClient({ accessToken: token });
 
       // Authorization in args is required by the auto-generated type but is not used at
-      // runtime by the wrapped client—auth comes from the apiKey above.
+      // runtime by the wrapped client—auth comes from the accessToken above.
       const socket = await client.listen.v1.connect({
         model: "nova-3",
         language: "ja",
@@ -68,7 +69,7 @@ export default function SpeakerPage() {
         interim_results: "true",
         encoding: "linear16",
         sample_rate: 16000,
-        Authorization: `Token ${token}`,
+        Authorization: `Bearer ${token}`,
         reconnectAttempts: 0,
       });
 
