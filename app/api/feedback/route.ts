@@ -1,18 +1,12 @@
 import { NextResponse } from "next/server";
-import * as v from "valibot";
-import { parseBody } from "@/lib/api";
+import { handleApiError, parseBody, TextWithPersonaBodySchema } from "@/lib/api";
 import { extractText, getClient } from "@/lib/claude";
 import { parsePersona } from "@/lib/persona";
-
-const BodySchema = v.object({
-  text: v.pipe(v.string(), v.nonEmpty("text is required")),
-  userPersona: v.optional(v.unknown()),
-});
 
 const MAX_FEEDBACK_HISTORY = 10;
 
 export async function POST(request: Request) {
-  const result = await parseBody(request, BodySchema);
+  const result = await parseBody(request, TextWithPersonaBodySchema);
   if (!result.ok) return result.response;
 
   const { text, userPersona } = result.data;
@@ -48,7 +42,6 @@ ${JSON.stringify(persona)}
 
     return NextResponse.json({ updatedPersona, inference });
   } catch (err) {
-    console.error("feedback error:", err);
-    return NextResponse.json({ error: "Failed to process feedback" }, { status: 500 });
+    return handleApiError("process feedback", err);
   }
 }

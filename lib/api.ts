@@ -17,3 +17,17 @@ export async function parseBody<T>(request: Request, schema: v.GenericSchema<unk
   }
   return { ok: true, data: result.output };
 }
+
+export const textField = v.pipe(v.string(), v.nonEmpty("text is required"));
+
+export const TextBodySchema = v.object({ text: textField });
+
+export const TextWithPersonaBodySchema = v.object({
+  text: textField,
+  userPersona: v.optional(v.unknown()),
+});
+
+export function handleApiError(label: string, err: unknown): NextResponse {
+  console.error(`${label} error:`, err);
+  return NextResponse.json({ error: `Failed to ${label}` }, { status: 500 });
+}

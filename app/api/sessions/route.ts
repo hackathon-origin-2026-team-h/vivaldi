@@ -2,12 +2,7 @@ import { randomUUID } from "crypto";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-function generateSessionId(): string {
-  return randomUUID();
-}
-
 export async function POST() {
-  const id = generateSessionId();
-  const session = await prisma.talkSession.create({ data: { id } });
+  const session = await prisma.talkSession.create({ data: { id: randomUUID() } });
   return NextResponse.json({ id: session.id }, { status: 201 });
 }

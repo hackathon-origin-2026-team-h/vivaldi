@@ -1,12 +1,12 @@
 import * as v from "valibot";
-import { getClient, parseJsonResponse } from "@/lib/claude";
+import { extractText, getClient, parseJsonResponse } from "@/lib/claude";
 
 const MODEL = "claude-sonnet-4-20250514";
 
 export type PipelineStep = {
   name: string;
   enabled: boolean;
-  run: (text: string) => Promise<string>;
+  run: (text: string) => Promise<string | { output: string; terms?: Term[] }>;
 };
 
 export type Term = {
@@ -26,18 +26,21 @@ export type PipelineResult = {
   terms: Term[];
 };
 
-async function removeFillersStep(text: string): Promise<string> {
-  const client = getClient();
-  const response = await client.messages.create({
+async function callLLM(system: string, text: string): Promise<string> {
+  const response = await getClient().messages.create({
     model: MODEL,
     max_tokens: 2048,
-    system:
-      "「えー」「あの」「まあ」「えっと」などの言い淀みを除去してください。意味のある言葉は一切変えないこと。テキストのみ返してください（JSON不要）。",
+    system,
     messages: [{ role: "user", content: text }],
   });
-  const block = response.content.find((b) => b.type === "text");
-  const result = block?.type === "text" ? block.text.trim() : "";
-  return result !== "" ? result : text;
+  return extractText(response) || text;
+}
+
+async function removeFillersStep(text: string): Promise<string> {
+  return callLLM(
+    "「えー」「あの」「まあ」「えっと」などの言い淀みを除去してください。意味のある言葉は一切変えないこと。テキストのみ返してください（JSON不要）。",
+    text,
+  );
 }
 
 const SimplifyResponseSchema = v.object({
@@ -45,51 +48,41 @@ const SimplifyResponseSchema = v.object({
   terms: v.array(v.object({ word: v.string(), explanation: v.string() })),
 });
 
-// Holds terms extracted during the simplify step so runPipeline can access them
-let _lastSimplifyTerms: Term[] = [];
-
-async function simplifyStep(text: string): Promise<string> {
-  const client = getClient();
-  const response = await client.messages.create({
+async function simplifyStep(text: string): Promise<{ output: string; terms: Term[] }> {
+  const response = await getClient().messages.create({
     model: MODEL,
     max_tokens: 2048,
     system:
       '専門用語・難しい言葉を小学生でもわかる言葉に言い換えてください。元の文章の意味・ニュアンスを変えないこと。以下のJSON形式のみで返してください（マークダウン・前置きテキスト不要）:\n{"text": "平易化された文章", "terms": [{"word": "専門用語", "explanation": "平易化された説明"}]}',
     messages: [{ role: "user", content: text }],
   });
-  const block = response.content.find((b) => b.type === "text");
-  if (!block || block.type !== "text") return text;
-
-  const parsed = parseJsonResponse(SimplifyResponseSchema, block.text);
-  _lastSimplifyTerms = parsed.terms;
-  return parsed.text;
+  const raw = extractText(response);
+  if (!raw) return { output: text, terms: [] };
+  const parsed = parseJsonResponse(SimplifyResponseSchema, raw);
+  return { output: parsed.text, terms: parsed.terms };
 }
 
 async function translateStep(text: string): Promise<string> {
-  const client = getClient();
-  const response = await client.messages.create({
-    model: MODEL,
-    max_tokens: 2048,
-    system: "日本語を自然な英語に翻訳してください。テキストのみ返してください（JSON不要）。",
-    messages: [{ role: "user", content: text }],
-  });
-  const block = response.content.find((b) => b.type === "text");
-  const result = block?.type === "text" ? block.text.trim() : "";
-  return result !== "" ? result : text;
+  return callLLM("日本語を自然な英語に翻訳してください。テキストのみ返してください（JSON不要）。", text);
 }
 
 export async function runPipeline(text: string, steps: PipelineStep[]): Promise<PipelineResult> {
-  _lastSimplifyTerms = [];
-
   const stepResults: PipelineResult["steps"] = [];
   let current = text;
+  let terms: Term[] = [];
 
   for (const step of steps) {
     const input = current;
     let output: string;
 
     if (step.enabled) {
-      output = await step.run(input);
+      const raw = await step.run(input);
+      if (typeof raw === "string") {
+        output = raw;
+      } else {
+        output = raw.output;
+        if (raw.terms) terms = raw.terms;
+      }
     } else {
       output = input;
     }
@@ -102,7 +95,7 @@ export async function runPipeline(text: string, steps: PipelineStep[]): Promise<
     original: text,
     output: current,
     steps: stepResults,
-    terms: _lastSimplifyTerms,
+    terms,
   };
 }
 
