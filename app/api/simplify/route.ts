@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { defaultPipeline, runPipeline } from "@/lib/llm";
 import * as v from "valibot";
 import { parseBody } from "@/lib/api";
+import { defaultPipeline, runPipeline } from "@/lib/llm";
 import { simplify } from "@/lib/simplify";
 
 const BodySchema = v.object({ text: v.pipe(v.string(), v.nonEmpty("text is required")) });
@@ -11,18 +11,9 @@ export async function POST(request: Request) {
   if (!result.ok) return result.response;
 
   // Validate steps: must be an array of strings if provided.
-  if (
-    body.steps !== undefined &&
-    (!Array.isArray(body.steps) || !body.steps.every((s) => typeof s === "string"))
-  ) {
-    return NextResponse.json(
-      { error: "steps must be an array of strings" },
-      { status: 400 },
-    );
+  if (body.steps !== undefined && (!Array.isArray(body.steps) || !body.steps.every((s) => typeof s === "string"))) {
+    return NextResponse.json({ error: "steps must be an array of strings" }, { status: 400 });
   }
-
-  const steps = Array.isArray(body.steps) ? body.steps : undefined;
-
   // Build pipeline: if body.steps is provided, select matching steps from
   // defaultPipeline in the order specified by body.steps. If a requested step
   // name does not exist in defaultPipeline, return 400. If body.steps is not
@@ -36,10 +27,7 @@ export async function POST(request: Request) {
     for (const stepName of body.steps) {
       const step = stepMap.get(stepName);
       if (!step) {
-        return NextResponse.json(
-          { error: `Unknown step: ${stepName}` },
-          { status: 400 },
-        );
+        return NextResponse.json({ error: `Unknown step: ${stepName}` }, { status: 400 });
       }
       selectedPipeline.push(step);
     }
