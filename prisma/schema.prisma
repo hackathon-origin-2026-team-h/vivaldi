@@ -11,3 +11,25 @@ generator client {
 datasource db {
   provider = "sqlite"
 }
+
+model TalkSession {
+  id        String              @id
+  status    SessionStatus       @default(BEFORE)
+  createdAt DateTime            @default(now())
+  segments  TranscriptSegment[]
+}
+
+enum SessionStatus {
+  BEFORE
+  DURING
+  AFTER
+}
+
+model TranscriptSegment {
+  id           Int         @id @default(autoincrement())
+  sessionId    String
+  session      TalkSession @relation(fields: [sessionId], references: [id])
+  rawText      String
+  polishedText String
+  createdAt    DateTime    @default(now())
+}
