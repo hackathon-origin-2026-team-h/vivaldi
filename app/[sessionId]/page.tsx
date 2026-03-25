@@ -97,9 +97,17 @@ export default function AttendeePage({ params }: { params: { sessionId: string }
     };
 
     es.onerror = () => {
-      // If session not found the server returns 404 before stream; detect via close
-      setNotFound(true);
+      // Close the stream on error, then check if the session actually exists.
       es.close();
+      void fetch(`/api/sessions/${sessionId}`)
+        .then((res) => {
+          if (res.status === 404) {
+            setNotFound(true);
+          }
+        })
+        .catch(() => {
+          // Treat network/server errors as transient: do not mark as notFound here.
+        });
     };
 
     return () => {
