@@ -26,7 +26,8 @@ export type PipelineResult = {
   terms: Term[];
 };
 
-async function callLLM(system: string, text: string, maxTokens: number): Promise<string> {
+async function callLLM(system: string, text: string, maxTokens: number, label?: string): Promise<string> {
+  const start = Date.now();
   const stream = getClient().messages.stream({
     model: MODEL,
     max_tokens: maxTokens,
@@ -34,6 +35,7 @@ async function callLLM(system: string, text: string, maxTokens: number): Promise
     messages: [{ role: "user", content: text }],
   });
   const message = await stream.finalMessage();
+  if (label) console.log(`[llm:${label}] ${Date.now() - start}ms`);
   return extractText(message) || text;
 }
 
@@ -42,6 +44,7 @@ async function removeFillersStep(text: string): Promise<string> {
     "「えー」「あの」「まあ」「えっと」などの言い淀みを除去してください。意味のある言葉は一切変えないこと。テキストのみ返してください（JSON不要）。",
     text,
     64,
+    "removeFillers",
   );
 }
 
@@ -51,6 +54,7 @@ const SimplifyResponseSchema = v.object({
 });
 
 async function simplifyStep(text: string): Promise<{ output: string; terms: Term[] }> {
+  const start = Date.now();
   const stream = getClient().messages.stream({
     model: MODEL,
     max_tokens: 256,
@@ -59,6 +63,7 @@ async function simplifyStep(text: string): Promise<{ output: string; terms: Term
     messages: [{ role: "user", content: text }],
   });
   const message = await stream.finalMessage();
+  console.log(`[llm:simplify] ${Date.now() - start}ms`);
   const raw = extractText(message);
   if (!raw) return { output: text, terms: [] };
   const parsed = parseJsonResponse(SimplifyResponseSchema, raw);
@@ -66,7 +71,7 @@ async function simplifyStep(text: string): Promise<{ output: string; terms: Term
 }
 
 async function translateStep(text: string): Promise<string> {
-  return callLLM("日本語を自然な英語に翻訳してください。テキストのみ返してください（JSON不要）。", text, 512);
+  return callLLM("日本語を自然な英語に翻訳してください。テキストのみ返してください（JSON不要）。", text, 512, "translate");
 }
 
 export async function runPipeline(text: string, steps: PipelineStep[]): Promise<PipelineResult> {

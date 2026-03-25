@@ -45,7 +45,9 @@ export async function simplify(text: string): Promise<SimplifiedResult> {
   const message = await stream.finalMessage();
   console.log(`[simplify] ${Date.now() - start}ms`);
 
-  const parsed = parseJsonResponse(SimplifyResponseSchema, extractText(message));
+  const raw = extractText(message);
+  if (!raw) return { original: text, simplified: text, terms: [] };
+  const parsed = parseJsonResponse(SimplifyResponseSchema, raw);
 
   return {
     original: text,

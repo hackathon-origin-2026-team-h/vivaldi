@@ -91,9 +91,12 @@ export default function AttendeePage({ params }: { params: Promise<{ sessionId: 
     const es = new EventSource(`/api/sessions/${sessionId}/stream`);
 
     es.onmessage = (event) => {
-      const data = JSON.parse(event.data as string) as
-        | { type: "session"; status: SessionStatus }
-        | { type: "segment"; id: number; polishedText: string; rawText: string };
+      let data: { type: "session"; status: SessionStatus } | { type: "segment"; id: number; polishedText: string; rawText: string };
+      try {
+        data = JSON.parse(event.data as string) as typeof data;
+      } catch {
+        return;
+      }
 
       if (data.type === "session") {
         setSessionStatus(data.status);
