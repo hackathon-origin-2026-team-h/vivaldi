@@ -75,6 +75,7 @@ export default function SpeakerPage() {
   const processorRef = useRef<ScriptProcessorNode | null>(null);
   const socketRef = useRef<{ sendMedia: (d: ArrayBufferLike) => void; close: () => void } | null>(null);
   const idCounterRef = useRef(0);
+  const lastInterimIdRef = useRef<number | null>(null);
   const sessionIdRef = useRef<string | null>(null);
 
   // Create session on mount
@@ -193,28 +194,28 @@ export default function SpeakerPage() {
               next[lastInterimIdx] = { ...next[lastInterimIdx], text: transcript };
               return next;
             }
+            lastInterimIdRef.current = newId;
             return [...prev, { id: newId, text: transcript, isFinal: false }];
           }
 
           if (lastInterimIdx !== -1) {
             const next = [...prev];
             next[lastInterimIdx] = { ...next[lastInterimIdx], text: transcript, isFinal: true };
-            const targetId = next[lastInterimIdx].id;
-            const sid = sessionIdRef.current;
-            void fetchPolished(transcript).then((polished) => {
-              setSegments((s) => s.map((seg) => (seg.id === targetId ? { ...seg, polished } : seg)));
-              if (sid) void postSegment(sid, transcript, polished);
-            });
             return next;
           }
 
-          const sid = sessionIdRef.current;
-          void fetchPolished(transcript).then((polished) => {
-            setSegments((s) => s.map((seg) => (seg.id === newId ? { ...seg, polished } : seg)));
-            if (sid) void postSegment(sid, transcript, polished);
-          });
           return [...prev, { id: newId, text: transcript, isFinal: true }];
         });
+
+        if (data.is_final) {
+          const targetId = lastInterimIdRef.current ?? newId;
+          lastInterimIdRef.current = null;
+          const sid = sessionIdRef.current;
+          void fetchPolished(transcript).then((polished) => {
+            setSegments((s) => s.map((seg) => (seg.id === targetId ? { ...seg, polished } : seg)));
+            if (sid) void postSegment(sid, transcript, polished);
+          });
+        }
       });
 
       socket.on("error", (err) => {
