@@ -2,49 +2,35 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { POST } from "./route";
 
-vi.mock("@/lib/pubsub", () => ({
-  createSession: vi.fn(),
+const mockStub = { fetch: vi.fn() };
+
+vi.mock("@opennextjs/cloudflare", () => ({
+  getCloudflareContext: vi.fn(() => Promise.resolve({ env: {} })),
 }));
 
-import { createSession } from "@/lib/pubsub";
+vi.mock("@/lib/session", () => ({
+  getSessionStub: vi.fn(() => mockStub),
+}));
 
 describe("POST /api/sessions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockStub.fetch.mockResolvedValue(new Response(null, { status: 200 }));
   });
 
   it("セッションを作成して 201 と id を返す", async () => {
-    vi.mocked(createSession).mockReturnValueOnce({
-      id: "test123",
-      status: "BEFORE",
-      createdAt: new Date(),
-      segments: [],
-      nextSegmentId: 1,
-    });
-
-    const res = await POST();
-    const body = await res.json();
-
-    expect(res.status).toBe(201);
-    expect(body).toHaveProperty("id", "test123");
-    expect(createSession).toHaveBeenCalledOnce();
-  });
-
-  it("生成される id は文字列である", async () => {
-    vi.mocked(createSession).mockReturnValueOnce({
-      id: "dummy",
-      status: "BEFORE",
-      createdAt: new Date(),
-      segments: [],
-      nextSegmentId: 1,
-    });
-
     const res = await POST();
     const body = (await res.json()) as { id: string };
 
-    const calledWith = vi.mocked(createSession).mock.calls[0][0];
-    expect(typeof calledWith).toBe("string");
-    expect(calledWith.length).toBeGreaterThan(0);
-    expect(body.id).toBe("dummy");
+    expect(res.status).toBe(201);
+    expect(body).toHaveProperty("id");
+  });
+
+  it("生成される id は文字列である", async () => {
+    const res = await POST();
+    const body = (await res.json()) as { id: string };
+
+    expect(typeof body.id).toBe("string");
+    expect(body.id.length).toBeGreaterThan(0);
   });
 });

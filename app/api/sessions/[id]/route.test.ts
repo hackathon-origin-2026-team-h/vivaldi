@@ -2,12 +2,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PATCH } from "./route";
 
-vi.mock("@/lib/pubsub", () => ({
-  getSession: vi.fn(),
-  updateSessionStatus: vi.fn(),
+const mockStub = { fetch: vi.fn() };
+
+vi.mock("@opennextjs/cloudflare", () => ({
+  getCloudflareContext: vi.fn(() => Promise.resolve({ env: {} })),
 }));
 
-import { updateSessionStatus } from "@/lib/pubsub";
+vi.mock("@/lib/session", () => ({
+  getSessionStub: vi.fn(() => mockStub),
+}));
 
 const makeRequest = (body: unknown) =>
   new Request("http://localhost/api/sessions/abc", {
@@ -24,13 +27,9 @@ describe("PATCH /api/sessions/[id]", () => {
   });
 
   it("DURING に更新できる", async () => {
-    vi.mocked(updateSessionStatus).mockReturnValueOnce({
-      id: "abc",
-      status: "DURING",
-      createdAt: new Date(),
-      segments: [],
-      nextSegmentId: 1,
-    });
+    mockStub.fetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ id: "abc", status: "DURING" }), { status: 200 }),
+    );
 
     const res = await PATCH(makeRequest({ status: "DURING" }), params);
     const body = await res.json();
@@ -40,13 +39,9 @@ describe("PATCH /api/sessions/[id]", () => {
   });
 
   it("AFTER に更新できる", async () => {
-    vi.mocked(updateSessionStatus).mockReturnValueOnce({
-      id: "abc",
-      status: "AFTER",
-      createdAt: new Date(),
-      segments: [],
-      nextSegmentId: 1,
-    });
+    mockStub.fetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ id: "abc", status: "AFTER" }), { status: 200 }),
+    );
 
     const res = await PATCH(makeRequest({ status: "AFTER" }), params);
     const body = (await res.json()) as { status: string };
@@ -61,7 +56,7 @@ describe("PATCH /api/sessions/[id]", () => {
 
     expect(res.status).toBe(400);
     expect(body).toHaveProperty("error");
-    expect(updateSessionStatus).not.toHaveBeenCalled();
+    expect(mockStub.fetch).not.toHaveBeenCalled();
   });
 
   it("status なしは 400 を返す", async () => {
@@ -70,7 +65,7 @@ describe("PATCH /api/sessions/[id]", () => {
   });
 
   it("存在しないセッションは 404 を返す", async () => {
-    vi.mocked(updateSessionStatus).mockReturnValueOnce(null);
+    mockStub.fetch.mockResolvedValueOnce(new Response(null, { status: 404 }));
 
     const res = await PATCH(makeRequest({ status: "DURING" }), params);
     const body = await res.json();

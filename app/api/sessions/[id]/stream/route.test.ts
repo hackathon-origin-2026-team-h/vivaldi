@@ -1,19 +1,35 @@
 // @vitest-environment node
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { GET } from "./route";
 
-vi.mock("@/lib/pubsub", () => ({
-  getSession: vi.fn(),
-  subscribe: vi.fn(() => vi.fn()),
+const mockWs = {
+  accept: vi.fn(),
+  addEventListener: vi.fn(),
+  close: vi.fn(),
+};
+
+const mockStub = { fetch: vi.fn() };
+
+vi.mock("@opennextjs/cloudflare", () => ({
+  getCloudflareContext: vi.fn(() => Promise.resolve({ env: {} })),
 }));
 
-import { getSession, subscribe } from "@/lib/pubsub";
+vi.mock("@/lib/session", () => ({
+  getSessionStub: vi.fn(() => mockStub),
+}));
 
 const params = { params: Promise.resolve({ id: "abc" }) };
 
+const makeWsResponse = () =>
+  Object.assign(new Response(null, { status: 200 }), { webSocket: mockWs });
+
 describe("GET /api/sessions/[id]/stream", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it("存在しないセッションは 404 を返す", async () => {
-    vi.mocked(getSession).mockReturnValueOnce(undefined);
+    mockStub.fetch.mockResolvedValueOnce(new Response(null, { status: 404 }));
 
     const req = new Request("http://localhost/api/sessions/abc/stream");
     const res = await GET(req, params);
@@ -24,14 +40,10 @@ describe("GET /api/sessions/[id]/stream", () => {
   });
 
   it("セッションが存在すれば SSE レスポンスを返す", async () => {
-    vi.mocked(getSession).mockReturnValue({
-      id: "abc",
-      status: "BEFORE",
-      createdAt: new Date(),
-      segments: [],
-      nextSegmentId: 1,
-    });
-    vi.mocked(subscribe).mockReturnValue(vi.fn());
+    const sessionState = { id: "abc", status: "BEFORE", segments: [], createdAt: new Date().toISOString() };
+    mockStub.fetch
+      .mockResolvedValueOnce(new Response(JSON.stringify(sessionState), { status: 200 }))
+      .mockResolvedValueOnce(makeWsResponse());
 
     const controller = new AbortController();
     const req = new Request("http://localhost/api/sessions/abc/stream", {
@@ -47,14 +59,10 @@ describe("GET /api/sessions/[id]/stream", () => {
   });
 
   it("初回メッセージにセッションステータスが含まれる", async () => {
-    vi.mocked(getSession).mockReturnValue({
-      id: "abc",
-      status: "DURING",
-      createdAt: new Date(),
-      segments: [],
-      nextSegmentId: 1,
-    });
-    vi.mocked(subscribe).mockReturnValue(vi.fn());
+    const sessionState = { id: "abc", status: "DURING", segments: [], createdAt: new Date().toISOString() };
+    mockStub.fetch
+      .mockResolvedValueOnce(new Response(JSON.stringify(sessionState), { status: 200 }))
+      .mockResolvedValueOnce(makeWsResponse());
 
     const controller = new AbortController();
     const req = new Request("http://localhost/api/sessions/abc/stream", {
