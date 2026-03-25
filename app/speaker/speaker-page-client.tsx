@@ -1,6 +1,7 @@
 "use client";
 
 import { DeepgramClient } from "@deepgram/sdk";
+import Image from "next/image";
 import QRCode from "qrcode";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -240,7 +241,14 @@ export default function SpeakerPageClient() {
         {sessionId && (
           <div className="mb-6 flex flex-col items-center gap-6 rounded-xl border border-gray-200 bg-white p-6 sm:flex-row">
             {qrDataUrl ? (
-              <img src={qrDataUrl} alt="QR code for audience" width={128} height={128} className="shrink-0" />
+              <Image
+                src={qrDataUrl}
+                alt="QR code for audience"
+                width={128}
+                height={128}
+                className="shrink-0"
+                unoptimized
+              />
             ) : (
               <div className="flex h-32 w-32 shrink-0 items-center justify-center rounded bg-gray-100 text-xs text-gray-400">
                 生成中…

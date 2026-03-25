@@ -3,10 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import Home from "./page";
 
 vi.mock("next/image", () => ({
-  default: (props: React.ImgHTMLAttributes<HTMLImageElement>) => {
-    // eslint-disable-next-line @next/next/no-img-element
-    return <img alt="" {...props} />;
-  },
+  default: ({ alt }: React.ComponentProps<"img">) => <span data-next-image={alt ?? ""} />,
 }));
 
 describe("Home", () => {

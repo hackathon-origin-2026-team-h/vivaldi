@@ -111,8 +111,8 @@
   width: 6rem;
   height: 6rem;
   pointer-events: auto;
-  border-radius: 999px;
   border: 1px solid #5b5b5b;
+  border-radius: 999px;
   opacity: 0;
   transform: scale(0.2);
 }
