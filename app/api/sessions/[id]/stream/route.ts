@@ -32,25 +32,16 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
   // Flush initial state synchronously before returning the response
   const flush = async () => {
-    await writer.write(
-      encoder.encode(
-        `data: ${JSON.stringify({ type: "session", status: session.status })}\n\n`,
-      ),
-    );
+    await writer.write(encoder.encode(`data: ${JSON.stringify({ type: "session", status: session.status })}\n\n`));
     for (const seg of session.segments) {
-      await writer.write(
-        encoder.encode(`data: ${JSON.stringify({ type: "segment", ...seg })}\n\n`),
-      );
+      await writer.write(encoder.encode(`data: ${JSON.stringify({ type: "segment", ...seg })}\n\n`));
     }
   };
   void flush();
 
   // Forward DO broadcast events to the SSE stream
   ws.addEventListener("message", (event) => {
-    const data =
-      typeof event.data === "string"
-        ? event.data
-        : new TextDecoder().decode(event.data as ArrayBuffer);
+    const data = typeof event.data === "string" ? event.data : new TextDecoder().decode(event.data as ArrayBuffer);
     writer.write(encoder.encode(`data: ${data}\n\n`)).catch(() => {});
   });
   ws.addEventListener("close", () => {
