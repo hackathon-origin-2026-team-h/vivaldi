@@ -1,27 +1,29 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import Home from "./page";
 
-vi.mock("next/image", () => ({
-  default: (props: React.ImgHTMLAttributes<HTMLImageElement>) => {
-    // eslint-disable-next-line @next/next/no-img-element
-    return <img alt="" {...props} />;
-  },
+vi.mock("next/font/google", () => ({
+  Syne: () => ({ className: "syne" }),
+  Kosugi_Maru: () => ({ className: "kosugi" }),
+  Unbounded: () => ({ className: "unbounded" }),
 }));
 
+import Home from "./page";
+
 describe("Home", () => {
-  it("renders the heading", () => {
+  it("fumumu. ロゴが表示される", () => {
     render(<Home />);
-    expect(screen.getByText("To get started, edit the page.tsx file.")).toBeInTheDocument();
+    const logos = screen.getAllByText(/fumumu/);
+    expect(logos.length).toBeGreaterThan(0);
   });
 
-  it("renders the deploy link", () => {
+  it("始めるボタンが表示される", () => {
     render(<Home />);
-    expect(screen.getByText("Deploy Now")).toBeInTheDocument();
+    const buttons = screen.getAllByText(/始める/);
+    expect(buttons.length).toBeGreaterThan(0);
   });
 
-  it("renders the documentation link", () => {
+  it("キャッチコピーが表示される", () => {
     render(<Home />);
-    expect(screen.getByText("Documentation")).toBeInTheDocument();
+    expect(screen.getByText(/専門用語を、その場で、あなたの言葉に。/)).toBeInTheDocument();
   });
 });
