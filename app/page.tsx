@@ -66,7 +66,9 @@ export default function Home() {
               </svg>
             </div>
             <p className="text-sm font-semibold text-slate-800">分かりやすく翻訳</p>
-            <p className="text-xs text-slate-500 leading-relaxed">専門用語を含む文章を、分かりやすく参加者に伝えます。</p>
+            <p className="text-xs text-slate-500 leading-relaxed">
+              専門用語を含む文章を、分かりやすく参加者に伝えます。
+            </p>
           </div>
           <div className="bg-white rounded-2xl border border-slate-200 p-5 flex flex-col gap-2 shadow-sm">
             <div className="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center">
