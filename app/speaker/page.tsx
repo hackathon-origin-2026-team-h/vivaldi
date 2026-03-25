@@ -22,14 +22,19 @@ function float32ToInt16(float32: Float32Array): Int16Array {
 }
 
 async function fetchPolished(text: string): Promise<string> {
-  const res = await fetch("/api/polish", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text }),
-  });
-  if (!res.ok) return text;
-  const body = (await res.json()) as { polished?: string };
-  return body.polished ?? text;
+  try {
+    const res = await fetch("/api/polish", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+    if (!res.ok) return text;
+    const body = (await res.json()) as { polished?: string };
+    return body.polished ?? text;
+  } catch (err) {
+    console.error("Failed to fetch polished text:", err);
+    return text;
+  }
 }
 
 export default function SpeakerPage() {
