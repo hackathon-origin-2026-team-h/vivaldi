@@ -301,7 +301,7 @@ export default function SpeakerPage() {
           </p>
 
           {qrDataUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
+            // biome-ignore lint/performance/noImgElement: QR code data URL cannot use next/image
             <img src={qrDataUrl} alt="参加者用QRコード" width={180} height={180} className="rounded-xl" />
           ) : (
             <div

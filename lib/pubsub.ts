@@ -77,5 +77,7 @@ export function subscribe(sessionId: string, callback: Subscriber): () => void {
 }
 
 function publish(sessionId: string, event: SSEEvent): void {
-  subscribers.get(sessionId)?.forEach((cb) => cb(event));
+  subscribers.get(sessionId)?.forEach((cb) => {
+    cb(event);
+  });
 }
