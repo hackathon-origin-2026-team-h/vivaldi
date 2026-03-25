@@ -69,6 +69,7 @@ export default function SpeakerPage() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [audienceUrl, setAudienceUrl] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const streamRef = useRef<MediaStream | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -233,94 +234,172 @@ export default function SpeakerPage() {
     }
   }, [stopRecording]);
 
+  const handleCopyUrl = useCallback(async () => {
+    if (!audienceUrl) return;
+    try {
+      await navigator.clipboard.writeText(audienceUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // fallback: silently ignore clipboard errors
+    }
+  }, [audienceUrl]);
+
   const isRecording = status === "recording";
   const isConnecting = status === "connecting";
+  const isIdle = status === "idle";
 
   return (
-    <main className="min-h-screen bg-gray-50 p-8">
-      <div className="max-w-2xl mx-auto">
-        <h1 className="text-2xl font-bold text-gray-900 mb-1">音声書き起こし</h1>
-        <p className="text-sm text-gray-500 mb-8">マイクからの音声をリアルタイムで文字起こしします</p>
-
-        {/* Audience QR code */}
-        {sessionId && (
-          <div className="mb-6 bg-white rounded-xl border border-gray-200 p-6 flex flex-col sm:flex-row items-center gap-6">
-            {qrDataUrl ? (
-              <img src={qrDataUrl} alt="QR code for audience" width={128} height={128} className="shrink-0" />
-            ) : (
-              <div className="w-32 h-32 shrink-0 bg-gray-100 rounded flex items-center justify-center text-gray-400 text-xs">
-                生成中…
-              </div>
-            )}
-            <div className="min-w-0">
-              <p className="text-sm font-medium text-gray-700 mb-1">聴講者URL</p>
-              {audienceUrl && <p className="text-xs text-gray-500 break-all font-mono">{audienceUrl}</p>}
-              <p className="text-xs text-gray-400 mt-2">このQRコードを聴講者にスキャンしてもらってください</p>
-            </div>
-          </div>
-        )}
-
-        <div className="flex items-center gap-4 mb-6">
-          <button
-            type="button"
-            onClick={isRecording ? () => void stopRecording() : () => void startRecording()}
-            disabled={isConnecting || !sessionId}
-            className={[
-              "px-6 py-2.5 rounded-lg font-semibold text-white text-sm transition-colors",
-              isRecording
-                ? "bg-red-500 hover:bg-red-600"
-                : isConnecting || !sessionId
-                  ? "bg-gray-400 cursor-not-allowed"
-                  : "bg-blue-500 hover:bg-blue-600",
-            ].join(" ")}
-          >
-            {isConnecting ? "接続中…" : isRecording ? "録音停止" : "録音開始"}
-          </button>
-
-          <div className="flex items-center gap-2">
-            <span
-              className={[
-                "h-2.5 w-2.5 rounded-full",
-                isRecording ? "bg-red-500 animate-pulse" : isConnecting ? "bg-yellow-400 animate-pulse" : "bg-gray-300",
-              ].join(" ")}
-            />
-            <span className="text-sm text-gray-600">
-              {status === "idle" && "待機中"}
-              {status === "connecting" && "接続中"}
-              {status === "recording" && "録音中"}
-            </span>
-          </div>
+    <main className="min-h-screen bg-slate-50 flex flex-col items-center justify-center px-6 py-12">
+      <div className="max-w-sm w-full mx-auto flex flex-col items-center gap-8">
+        {/* Header */}
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-slate-900">発表者コントロール</h1>
+          <p className="text-sm text-slate-500 mt-1">QRコードを参加者に共有して録音を開始してください</p>
         </div>
 
-        {error !== null && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">{error}</div>
-        )}
-
-        <div className="bg-white rounded-xl border border-gray-200 min-h-48 p-6">
-          {segments.length === 0 ? (
-            <p className="text-gray-400 text-sm text-center pt-8">「録音開始」を押すと書き起こしがここに表示されます</p>
+        {/* QR Code card */}
+        <div className="w-full bg-white rounded-2xl border border-slate-200 shadow-sm p-6 flex flex-col items-center gap-4">
+          {qrDataUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={qrDataUrl} alt="参加者用QRコード" width={200} height={200} className="rounded-xl" />
           ) : (
-            <div className="space-y-1">
-              {segments.map((seg) => (
-                <p
-                  key={seg.id}
-                  className={`text-base leading-relaxed ${seg.isFinal ? "text-gray-900" : "text-gray-400"}`}
-                >
-                  {seg.isFinal ? (seg.polished ?? seg.text) : seg.text}
-                </p>
-              ))}
+            <div className="w-[200px] h-[200px] rounded-xl bg-slate-100 flex items-center justify-center">
+              <span className="text-slate-400 text-sm">生成中…</span>
             </div>
           )}
-        </div>
 
-        {segments.length > 0 && (
+          {/* Copy URL button */}
           <button
             type="button"
-            onClick={() => setSegments([])}
-            className="mt-3 text-sm text-gray-400 hover:text-gray-600 transition-colors"
+            onClick={() => void handleCopyUrl()}
+            disabled={!audienceUrl}
+            className={[
+              "flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-colors",
+              audienceUrl
+                ? copied
+                  ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                  : "bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200"
+                : "bg-slate-50 text-slate-400 border border-slate-200 cursor-not-allowed",
+            ].join(" ")}
           >
-            クリア
+            {copied ? (
+              <>
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="w-4 h-4"
+                  aria-hidden="true"
+                >
+                  <title>コピー完了</title>
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+                コピーしました
+              </>
+            ) : (
+              <>
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="w-4 h-4"
+                  aria-hidden="true"
+                >
+                  <title>URLをコピー</title>
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                </svg>
+                参加者URLをコピー
+              </>
+            )}
           </button>
+
+          <p className="text-xs text-slate-400 text-center leading-relaxed">
+            書き起こされた文章はQRコードのリンク先で参加者に公開されます
+          </p>
+        </div>
+
+        {/* Status indicator */}
+        <div
+          className={[
+            "w-full rounded-2xl border px-5 py-4 flex items-center gap-4 transition-colors",
+            isRecording
+              ? "bg-red-50 border-red-200"
+              : isConnecting
+                ? "bg-amber-50 border-amber-200"
+                : "bg-white border-slate-200",
+          ].join(" ")}
+        >
+          {/* Animated dot */}
+          <div className="relative flex items-center justify-center w-10 h-10 shrink-0">
+            {isRecording && (
+              <span className="absolute inline-flex w-full h-full rounded-full bg-red-400 opacity-50 animate-ping" />
+            )}
+            <span
+              className={[
+                "relative inline-flex w-5 h-5 rounded-full",
+                isRecording ? "bg-red-500" : isConnecting ? "bg-amber-400" : "bg-slate-300",
+              ].join(" ")}
+            />
+          </div>
+          <div>
+            <p
+              className={[
+                "text-sm font-semibold",
+                isRecording ? "text-red-700" : isConnecting ? "text-amber-700" : "text-slate-600",
+              ].join(" ")}
+            >
+              {isRecording ? "録音中" : isConnecting ? "接続中…" : "待機中"}
+            </p>
+            <p
+              className={[
+                "text-xs mt-0.5",
+                isRecording ? "text-red-500" : isConnecting ? "text-amber-500" : "text-slate-400",
+              ].join(" ")}
+            >
+              {isRecording
+                ? "音声をリアルタイムで書き起こしています"
+                : isConnecting
+                  ? "マイクとサーバーに接続しています"
+                  : "「録音開始」を押すと配信が始まります"}
+            </p>
+          </div>
+        </div>
+
+        {/* Error */}
+        {error !== null && (
+          <div className="w-full p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm">{error}</div>
+        )}
+
+        {/* Start / Stop button */}
+        <button
+          type="button"
+          onClick={isRecording ? () => void stopRecording() : () => void startRecording()}
+          disabled={isConnecting || !sessionId}
+          className={[
+            "w-full py-4 rounded-2xl font-bold text-base text-white transition-colors shadow-sm",
+            isRecording
+              ? "bg-red-500 hover:bg-red-600 active:bg-red-700"
+              : isConnecting || !sessionId
+                ? "bg-slate-300 cursor-not-allowed"
+                : "bg-blue-600 hover:bg-blue-700 active:bg-blue-800",
+          ].join(" ")}
+        >
+          {isConnecting ? "接続中…" : isRecording ? "録音を停止する" : "録音を開始する"}
+        </button>
+
+        {/* Segment count hint (no transcript text shown) */}
+        {segments.length > 0 && isIdle && (
+          <p className="text-xs text-slate-400 text-center">{segments.length} 件の書き起こしが参加者に配信されました</p>
         )}
       </div>
     </main>
