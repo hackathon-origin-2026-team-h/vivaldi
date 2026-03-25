@@ -1,25 +1,16 @@
 import { NextResponse } from "next/server";
+import * as v from "valibot";
+import { parseBody } from "@/lib/api";
 import { simplify } from "@/lib/simplify";
 
+const BodySchema = v.object({ text: v.pipe(v.string(), v.nonEmpty("text is required")) });
+
 export async function POST(request: Request) {
-  let body: { text?: string };
+  const result = await parseBody(request, BodySchema);
+  if (!result.ok) return result.response;
 
   try {
-    body = (await request.json()) as { text?: string };
-  } catch (err) {
-    console.error("Invalid JSON body:", err);
-    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
-  }
-
-  const text = body.text?.trim();
-
-  if (!text) {
-    return NextResponse.json({ error: "text is required" }, { status: 400 });
-  }
-
-  try {
-    const result = await simplify(text);
-    return NextResponse.json(result);
+    return NextResponse.json(await simplify(result.data.text));
   } catch (err) {
     console.error("simplify error:", err);
     return NextResponse.json({ error: "Failed to simplify text" }, { status: 500 });
