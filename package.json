@@ -14,6 +14,7 @@
     "test:watch": "vitest",
     "test:visual": "playwright test",
     "test:visual:update": "playwright test --update-snapshots",
+    "db:init": "prisma db push --preview-feature --accept-data-loss",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:push": "prisma db push",
@@ -22,7 +23,6 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",
     "@deepgram/sdk": "^5.0.0",
-    "@google/genai": "^1.46.0",
     "@libsql/client": "^0.17.2",
     "@prisma/adapter-libsql": "^7.5.0",
     "@prisma/client": "^7.5.0",

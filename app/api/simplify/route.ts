@@ -1,27 +1,15 @@
 import { NextResponse } from "next/server";
-import { simplify } from "@/lib/simplify";
+import { handleApiError, parseBody, TextBodySchema } from "@/lib/api";
+import { defaultPipeline, runPipeline } from "@/lib/llm";
 
 export async function POST(request: Request) {
-  let body: { text?: string };
+  const parsed = await parseBody(request, TextBodySchema);
+  if (!parsed.ok) return parsed.response;
 
   try {
-    body = (await request.json()) as { text?: string };
-  } catch (err) {
-    console.error("Invalid JSON body:", err);
-    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
-  }
-
-  const text = body.text?.trim();
-
-  if (!text) {
-    return NextResponse.json({ error: "text is required" }, { status: 400 });
-  }
-
-  try {
-    const result = await simplify(text);
+    const result = await runPipeline(parsed.data.text, defaultPipeline);
     return NextResponse.json(result);
   } catch (err) {
-    console.error("simplify error:", err);
-    return NextResponse.json({ error: "Failed to simplify text" }, { status: 500 });
+    return handleApiError("process text", err);
   }
 }

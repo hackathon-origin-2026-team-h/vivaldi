@@ -1,4 +1,15 @@
-import Anthropic from "@anthropic-ai/sdk";
+import * as v from "valibot";
+import { extractText, getClient, parseJsonResponse } from "@/lib/claude";
+
+const SimplifyResponseSchema = v.object({
+  simplified: v.string(),
+  terms: v.array(
+    v.object({
+      word: v.string(),
+      explanation: v.string(),
+    }),
+  ),
+});
 
 export type Term = {
   word: string;
@@ -15,30 +26,14 @@ const SYSTEM_PROMPT = `専門用語・難しい言葉を小学生でもわかる
 {"simplified": "平易化された文章", "terms": [{"word": "専門用語", "explanation": "平易化された説明"}]}`;
 
 export async function simplify(text: string): Promise<SimplifiedResult> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    throw new Error("ANTHROPIC_API_KEY is not set");
-  }
-
-  const client = new Anthropic({ apiKey });
-
-  const message = await client.messages.create({
-    model: "claude-sonnet-4-20250514",
+  const message = await getClient().messages.create({
+    model: "claude-sonnet-4-6",
     max_tokens: 2048,
     system: SYSTEM_PROMPT,
     messages: [{ role: "user", content: text }],
   });
 
-  const content = message.content[0];
-  if (content.type !== "text") {
-    throw new Error("Unexpected response type from Claude");
-  }
-
-  const jsonText = content.text
-    .replace(/^```(?:json)?\s*/i, "")
-    .replace(/\s*```$/, "")
-    .trim();
-  const parsed = JSON.parse(jsonText) as { simplified: string; terms: Term[] };
+  const parsed = parseJsonResponse(SimplifyResponseSchema, extractText(message));
 
   return {
     original: text,

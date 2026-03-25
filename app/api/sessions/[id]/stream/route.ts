@@ -1,23 +1,19 @@
+import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const session = await prisma.talkSession.findUnique({
-    where: { id },
-  });
+  const session = await prisma.talkSession.findUnique({ where: { id } });
   if (!session) {
-    return new Response(JSON.stringify({ error: "Session not found" }), {
-      status: 404,
-      headers: { "Content-Type": "application/json" },
-    });
+    return NextResponse.json({ error: "Session not found" }, { status: 404 });
   }
 
   const encoder = new TextEncoder();
   let lastSegmentId = 0;
+  let lastStatus = session.status;
 
   const stream = new ReadableStream({
     start(controller) {
-      // Send initial session status
       controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "session", status: session.status })}\n\n`));
 
       let aborted = false;
@@ -25,23 +21,21 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       const poll = async () => {
         if (aborted) return;
         try {
-          const segments = await prisma.transcriptSegment.findMany({
-            where: { sessionId: id, id: { gt: lastSegmentId } },
-            orderBy: { id: "asc" },
-          });
+          const [segments, current] = await Promise.all([
+            prisma.transcriptSegment.findMany({
+              where: { sessionId: id, id: { gt: lastSegmentId } },
+              orderBy: { id: "asc" },
+            }),
+            prisma.talkSession.findUnique({ where: { id }, select: { status: true } }),
+          ]);
 
           for (const seg of segments) {
             controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "segment", ...seg })}\n\n`));
             lastSegmentId = seg.id;
           }
 
-          // Also check for status changes
-          const current = await prisma.talkSession.findUnique({
-            where: { id },
-            select: { status: true },
-          });
-          if (current && current.status !== session.status) {
-            session.status = current.status;
+          if (current && current.status !== lastStatus) {
+            lastStatus = current.status;
             controller.enqueue(
               encoder.encode(`data: ${JSON.stringify({ type: "session", status: current.status })}\n\n`),
             );
