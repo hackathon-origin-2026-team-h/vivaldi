@@ -20,8 +20,7 @@ vi.mock("@/lib/session", () => ({
 
 const params = { params: Promise.resolve({ id: "abc" }) };
 
-const makeWsResponse = () =>
-  Object.assign(new Response(null, { status: 200 }), { webSocket: mockWs });
+const makeWsResponse = () => Object.assign(new Response(null, { status: 200 }), { webSocket: mockWs });
 
 describe("GET /api/sessions/[id]/stream", () => {
   beforeEach(() => {

@@ -39,9 +39,7 @@ describe("PATCH /api/sessions/[id]", () => {
   });
 
   it("AFTER に更新できる", async () => {
-    mockStub.fetch.mockResolvedValueOnce(
-      new Response(JSON.stringify({ id: "abc", status: "AFTER" }), { status: 200 }),
-    );
+    mockStub.fetch.mockResolvedValueOnce(new Response(JSON.stringify({ id: "abc", status: "AFTER" }), { status: 200 }));
 
     const res = await PATCH(makeRequest({ status: "AFTER" }), params);
     const body = (await res.json()) as { status: string };
