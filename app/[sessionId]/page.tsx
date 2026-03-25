@@ -16,6 +16,7 @@ type DisplaySegment = {
   personalizedText: string | null;
   isFeedbackPending: boolean;
   feedbackDone: boolean;
+  feedbackError: boolean;
 };
 
 const PERSONA_KEY = "vivaldi:userPersona";
@@ -85,7 +86,7 @@ export default function AttendeePage({ params }: { params: { sessionId: string }
         const { id, polishedText } = data;
         setSegments((prev) => {
           if (prev.some((s) => s.id === id)) return prev;
-          return [...prev, { id, polishedText, personalizedText: null, isFeedbackPending: false, feedbackDone: false }];
+          return [...prev, { id, polishedText, personalizedText: null, isFeedbackPending: false, feedbackDone: false, feedbackError: false }];
         });
         // Personalize in background
         const currentPersona = personaRef.current;
@@ -119,14 +120,19 @@ export default function AttendeePage({ params }: { params: { sessionId: string }
         const body = (await res.json()) as { updatedPersona: UserPersona };
         personaRef.current = body.updatedPersona;
         savePersona(body.updatedPersona);
+        setSegments((prev) =>
+          prev.map((s) => (s.id === segmentId ? { ...s, isFeedbackPending: false, feedbackDone: true } : s)),
+        );
+      } else {
+        setSegments((prev) =>
+          prev.map((s) => (s.id === segmentId ? { ...s, isFeedbackPending: false, feedbackError: true } : s)),
+        );
       }
     } catch {
-      // silently fail
+      setSegments((prev) =>
+        prev.map((s) => (s.id === segmentId ? { ...s, isFeedbackPending: false, feedbackError: true } : s)),
+      );
     }
-
-    setSegments((prev) =>
-      prev.map((s) => (s.id === segmentId ? { ...s, isFeedbackPending: false, feedbackDone: true } : s)),
-    );
   }, []);
 
   if (notFound) {
@@ -201,6 +207,9 @@ export default function AttendeePage({ params }: { params: { sessionId: string }
                 )}
                 {seg.feedbackDone && (
                   <span className="mt-3 inline-block text-xs text-orange-500">フィードバックを送りました</span>
+                )}
+                {seg.feedbackError && (
+                  <span className="mt-3 inline-block text-xs text-red-500">送信に失敗しました。もう一度お試しください</span>
                 )}
               </div>
             ))}
