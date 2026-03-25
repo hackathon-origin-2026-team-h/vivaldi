@@ -1,5 +1,5 @@
 import * as v from "valibot";
-import { getClient, parseJsonResponse } from "@/lib/claude";
+import { extractText, getClient, parseJsonResponse } from "@/lib/claude";
 
 const SimplifyResponseSchema = v.object({
   simplified: v.string(),
@@ -26,21 +26,14 @@ const SYSTEM_PROMPT = `専門用語・難しい言葉を小学生でもわかる
 {"simplified": "平易化された文章", "terms": [{"word": "専門用語", "explanation": "平易化された説明"}]}`;
 
 export async function simplify(text: string): Promise<SimplifiedResult> {
-  const client = getClient();
-
-  const message = await client.messages.create({
-    model: "claude-sonnet-4-20250514",
+  const message = await getClient().messages.create({
+    model: "claude-sonnet-4-6",
     max_tokens: 2048,
     system: SYSTEM_PROMPT,
     messages: [{ role: "user", content: text }],
   });
 
-  const content = message.content[0];
-  if (content.type !== "text") {
-    throw new Error("Unexpected response type from Claude");
-  }
-
-  const parsed = parseJsonResponse(SimplifyResponseSchema, content.text);
+  const parsed = parseJsonResponse(SimplifyResponseSchema, extractText(message));
 
   return {
     original: text,

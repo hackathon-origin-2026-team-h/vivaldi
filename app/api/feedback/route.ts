@@ -1,23 +1,22 @@
 import { NextResponse } from "next/server";
-import { getClient } from "@/lib/claude";
+import * as v from "valibot";
+import { parseBody } from "@/lib/api";
+import { extractText, getClient } from "@/lib/claude";
 import { parsePersona } from "@/lib/persona";
+
+const BodySchema = v.object({
+  text: v.pipe(v.string(), v.nonEmpty("text is required")),
+  userPersona: v.optional(v.unknown()),
+});
 
 const MAX_FEEDBACK_HISTORY = 10;
 
 export async function POST(request: Request) {
-  let body: { text?: string; userPersona?: unknown };
-  try {
-    body = (await request.json()) as { text?: string; userPersona?: unknown };
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
-  }
+  const result = await parseBody(request, BodySchema);
+  if (!result.ok) return result.response;
 
-  const { text } = body;
-  if (!text) {
-    return NextResponse.json({ error: "text is required" }, { status: 400 });
-  }
-
-  const persona = parsePersona(body.userPersona);
+  const { text, userPersona } = result.data;
+  const persona = parsePersona(userPersona);
 
   try {
     const response = await getClient().messages.create({
@@ -41,8 +40,7 @@ ${JSON.stringify(persona)}
       ],
     });
 
-    const block = response.content.find((b) => b.type === "text");
-    const inference = block?.type === "text" ? block.text.trim() : "";
+    const inference = extractText(response);
     const updatedPersona = {
       ...persona,
       feedbackHistory: [...persona.feedbackHistory, { inference, timestamp: Date.now() }].slice(-MAX_FEEDBACK_HISTORY),
