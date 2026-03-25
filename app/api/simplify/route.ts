@@ -23,16 +23,29 @@ export async function POST(request: Request) {
 
   const steps = Array.isArray(body.steps) ? body.steps : undefined;
 
-  // Build pipeline: filter defaultPipeline by requested step names (if provided),
-  // and override enabled flag accordingly.
-  const pipeline =
-    steps && steps.length > 0
-      ? defaultPipeline.map((step) => ({
-          ...step,
-          enabled: steps.includes(step.name),
-        }))
-      : defaultPipeline;
+  // Build pipeline: if body.steps is provided, select matching steps from
+  // defaultPipeline in the order specified by body.steps. If a requested step
+  // name does not exist in defaultPipeline, return 400. If body.steps is not
+  // provided or empty, use defaultPipeline as-is.
+  let pipeline = defaultPipeline;
 
+  if (body.steps && body.steps.length > 0) {
+    const stepMap = new Map(defaultPipeline.map((step) => [step.name, step]));
+    const selectedPipeline = [];
+
+    for (const stepName of body.steps) {
+      const step = stepMap.get(stepName);
+      if (!step) {
+        return NextResponse.json(
+          { error: `Unknown step: ${stepName}` },
+          { status: 400 },
+        );
+      }
+      selectedPipeline.push(step);
+    }
+
+    pipeline = selectedPipeline;
+  }
   try {
     const result = await runPipeline(text, pipeline);
     return NextResponse.json(result);
