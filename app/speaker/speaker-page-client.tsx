@@ -69,8 +69,6 @@ export default function SpeakerPageClient() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [audienceUrl, setAudienceUrl] = useState<string | null>(null);
-  const [debugInput, setDebugInput] = useState("");
-  const [isSendingDebug, setIsSendingDebug] = useState(false);
 
   const streamRef = useRef<MediaStream | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -233,35 +231,6 @@ export default function SpeakerPageClient() {
   const isRecording = status === "recording";
   const isConnecting = status === "connecting";
 
-  const sendDebugTranscript = useCallback(async () => {
-    const transcript = debugInput.trim();
-    const sid = sessionIdRef.current;
-
-    if (!transcript || !sid || isConnecting || isRecording) {
-      return;
-    }
-
-    setError(null);
-    setIsSendingDebug(true);
-
-    const newId = idCounterRef.current + 1;
-    idCounterRef.current = newId;
-
-    setSegments((prev) => [...prev, { id: newId, text: transcript, isFinal: true }]);
-
-    try {
-      await patchSessionStatus(sid, "DURING");
-      const polished = await fetchPolished(transcript);
-      setSegments((current) => current.map((seg) => (seg.id === newId ? { ...seg, polished } : seg)));
-      await postSegment(sid, transcript, polished);
-      setDebugInput("");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "デバッグ入力の送信に失敗しました");
-    } finally {
-      setIsSendingDebug(false);
-    }
-  }, [debugInput, isConnecting, isRecording]);
-
   return (
     <main className="min-h-screen bg-gray-50 p-8">
       <div className="mx-auto max-w-2xl">
@@ -320,51 +289,6 @@ export default function SpeakerPageClient() {
         {error !== null && (
           <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>
         )}
-
-        <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50/80 p-5">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold text-amber-950">デバッグ用テキスト送信</p>
-              <p className="mt-1 text-xs leading-5 text-amber-900/75">
-                音声の代わりに文章を送信して、聴講者側の文字起こしと意訳の流れを確認できます。
-              </p>
-            </div>
-            <span className="rounded-full border border-amber-300 bg-white px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-700">
-              Temporary
-            </span>
-          </div>
-
-          <textarea
-            value={debugInput}
-            onChange={(event) => setDebugInput(event.target.value)}
-            onKeyDown={(event) => {
-              if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
-                event.preventDefault();
-                void sendDebugTranscript();
-              }
-            }}
-            rows={4}
-            placeholder="ここに発表文を入力して送信します"
-            className="mt-4 w-full rounded-lg border border-amber-200 bg-white px-4 py-3 text-sm leading-7 text-gray-900 shadow-sm outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-200"
-          />
-
-          <div className="mt-3 flex items-center justify-between gap-3">
-            <p className="text-xs text-amber-900/70">`Ctrl / Cmd + Enter` でも送信できます</p>
-            <button
-              type="button"
-              onClick={() => void sendDebugTranscript()}
-              disabled={!sessionId || isConnecting || isRecording || isSendingDebug || debugInput.trim().length === 0}
-              className={[
-                "rounded-lg px-4 py-2 text-sm font-semibold text-white transition-colors",
-                !sessionId || isConnecting || isRecording || isSendingDebug || debugInput.trim().length === 0
-                  ? "cursor-not-allowed bg-amber-300"
-                  : "bg-amber-500 hover:bg-amber-600",
-              ].join(" ")}
-            >
-              {isSendingDebug ? "送信中…" : "テキスト送信"}
-            </button>
-          </div>
-        </div>
 
         <div className="min-h-48 rounded-xl border border-gray-200 bg-white p-6">
           {segments.length === 0 ? (
