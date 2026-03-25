@@ -1,45 +1,50 @@
 // @vitest-environment node
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { POST } from "./route";
 
-vi.mock("@/lib/prisma", () => ({
-  prisma: {
-    talkSession: {
-      create: vi.fn(),
-    },
-  },
+vi.mock("@/lib/pubsub", () => ({
+  createSession: vi.fn(),
 }));
 
-import { prisma } from "@/lib/prisma";
+import { createSession } from "@/lib/pubsub";
 
 describe("POST /api/sessions", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it("セッションを作成して 201 と id を返す", async () => {
-    const mockCreate = vi.mocked(prisma.talkSession.create);
-    mockCreate.mockResolvedValueOnce({
+    vi.mocked(createSession).mockReturnValueOnce({
       id: "test123",
       status: "BEFORE",
       createdAt: new Date(),
-    } as never);
+      segments: [],
+      nextSegmentId: 1,
+    });
 
     const res = await POST();
     const body = await res.json();
 
     expect(res.status).toBe(201);
     expect(body).toHaveProperty("id", "test123");
-    expect(mockCreate).toHaveBeenCalledOnce();
+    expect(createSession).toHaveBeenCalledOnce();
   });
 
   it("生成される id は文字列である", async () => {
-    const mockCreate = vi.mocked(prisma.talkSession.create);
-    mockCreate.mockResolvedValueOnce({ id: "dummy", status: "BEFORE", createdAt: new Date() } as never);
+    vi.mocked(createSession).mockReturnValueOnce({
+      id: "dummy",
+      status: "BEFORE",
+      createdAt: new Date(),
+      segments: [],
+      nextSegmentId: 1,
+    });
 
     const res = await POST();
     const body = await res.json();
 
-    // create に渡された id が文字列であることを確認
-    const calledWith = mockCreate.mock.calls[0][0] as { data: { id: string } };
-    expect(typeof calledWith.data.id).toBe("string");
-    expect(calledWith.data.id.length).toBeGreaterThan(0);
+    const calledWith = vi.mocked(createSession).mock.calls[0][0];
+    expect(typeof calledWith).toBe("string");
+    expect(calledWith.length).toBeGreaterThan(0);
     expect(body.id).toBe("dummy");
   });
 });

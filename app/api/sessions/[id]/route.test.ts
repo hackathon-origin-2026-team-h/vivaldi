@@ -2,19 +2,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PATCH } from "./route";
 
-vi.mock("@/lib/prisma", () => ({
-  prisma: {
-    talkSession: {
-      findUnique: vi.fn(),
-      update: vi.fn(),
-    },
-  },
+vi.mock("@/lib/pubsub", () => ({
+  getSession: vi.fn(),
+  updateSessionStatus: vi.fn(),
 }));
 
-import { prisma } from "@/lib/prisma";
-
-const mockFindUnique = () => vi.mocked(prisma.talkSession.findUnique);
-const mockUpdate = () => vi.mocked(prisma.talkSession.update);
+import { updateSessionStatus } from "@/lib/pubsub";
 
 const makeRequest = (body: unknown) =>
   new Request("http://localhost/api/sessions/abc", {
@@ -31,16 +24,13 @@ describe("PATCH /api/sessions/[id]", () => {
   });
 
   it("DURING に更新できる", async () => {
-    mockFindUnique().mockResolvedValueOnce({
-      id: "abc",
-      status: "BEFORE",
-      createdAt: new Date(),
-    } as never);
-    mockUpdate().mockResolvedValueOnce({
+    vi.mocked(updateSessionStatus).mockReturnValueOnce({
       id: "abc",
       status: "DURING",
       createdAt: new Date(),
-    } as never);
+      segments: [],
+      nextSegmentId: 1,
+    });
 
     const res = await PATCH(makeRequest({ status: "DURING" }), params);
     const body = await res.json();
@@ -50,16 +40,13 @@ describe("PATCH /api/sessions/[id]", () => {
   });
 
   it("AFTER に更新できる", async () => {
-    mockFindUnique().mockResolvedValueOnce({
-      id: "abc",
-      status: "DURING",
-      createdAt: new Date(),
-    } as never);
-    mockUpdate().mockResolvedValueOnce({
+    vi.mocked(updateSessionStatus).mockReturnValueOnce({
       id: "abc",
       status: "AFTER",
       createdAt: new Date(),
-    } as never);
+      segments: [],
+      nextSegmentId: 1,
+    });
 
     const res = await PATCH(makeRequest({ status: "AFTER" }), params);
     const body = await res.json();
@@ -74,7 +61,7 @@ describe("PATCH /api/sessions/[id]", () => {
 
     expect(res.status).toBe(400);
     expect(body).toHaveProperty("error");
-    expect(mockUpdate()).not.toHaveBeenCalled();
+    expect(updateSessionStatus).not.toHaveBeenCalled();
   });
 
   it("status なしは 400 を返す", async () => {
@@ -83,14 +70,13 @@ describe("PATCH /api/sessions/[id]", () => {
   });
 
   it("存在しないセッションは 404 を返す", async () => {
-    mockFindUnique().mockResolvedValueOnce(null);
+    vi.mocked(updateSessionStatus).mockReturnValueOnce(null);
 
     const res = await PATCH(makeRequest({ status: "DURING" }), params);
     const body = await res.json();
 
     expect(res.status).toBe(404);
     expect(body).toHaveProperty("error");
-    expect(mockUpdate()).not.toHaveBeenCalled();
   });
 
   it("不正な JSON は 400 を返す", async () => {

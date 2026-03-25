@@ -2,24 +2,18 @@
 import { describe, expect, it, vi } from "vitest";
 import { GET } from "./route";
 
-vi.mock("@/lib/prisma", () => ({
-  prisma: {
-    talkSession: {
-      findUnique: vi.fn(),
-    },
-    transcriptSegment: {
-      findMany: vi.fn(),
-    },
-  },
+vi.mock("@/lib/pubsub", () => ({
+  getSession: vi.fn(),
+  subscribe: vi.fn(() => vi.fn()),
 }));
 
-import { prisma } from "@/lib/prisma";
+import { getSession, subscribe } from "@/lib/pubsub";
 
 const params = { params: Promise.resolve({ id: "abc" }) };
 
 describe("GET /api/sessions/[id]/stream", () => {
   it("存在しないセッションは 404 を返す", async () => {
-    vi.mocked(prisma.talkSession.findUnique).mockResolvedValueOnce(null);
+    vi.mocked(getSession).mockReturnValueOnce(undefined);
 
     const req = new Request("http://localhost/api/sessions/abc/stream");
     const res = await GET(req, params);
@@ -30,12 +24,14 @@ describe("GET /api/sessions/[id]/stream", () => {
   });
 
   it("セッションが存在すれば SSE レスポンスを返す", async () => {
-    vi.mocked(prisma.talkSession.findUnique).mockResolvedValue({
+    vi.mocked(getSession).mockReturnValue({
       id: "abc",
       status: "BEFORE",
       createdAt: new Date(),
-    } as never);
-    vi.mocked(prisma.transcriptSegment.findMany).mockResolvedValue([]);
+      segments: [],
+      nextSegmentId: 1,
+    });
+    vi.mocked(subscribe).mockReturnValue(vi.fn());
 
     const controller = new AbortController();
     const req = new Request("http://localhost/api/sessions/abc/stream", {
@@ -47,17 +43,18 @@ describe("GET /api/sessions/[id]/stream", () => {
     expect(res.headers.get("Content-Type")).toBe("text/event-stream");
     expect(res.headers.get("Cache-Control")).toBe("no-cache");
 
-    // 接続を閉じてポーリングを停止
     controller.abort();
   });
 
   it("初回メッセージにセッションステータスが含まれる", async () => {
-    vi.mocked(prisma.talkSession.findUnique).mockResolvedValue({
+    vi.mocked(getSession).mockReturnValue({
       id: "abc",
       status: "DURING",
       createdAt: new Date(),
-    } as never);
-    vi.mocked(prisma.transcriptSegment.findMany).mockResolvedValue([]);
+      segments: [],
+      nextSegmentId: 1,
+    });
+    vi.mocked(subscribe).mockReturnValue(vi.fn());
 
     const controller = new AbortController();
     const req = new Request("http://localhost/api/sessions/abc/stream", {
