@@ -49,7 +49,7 @@ describe("PATCH /api/sessions/[id]", () => {
     });
 
     const res = await PATCH(makeRequest({ status: "AFTER" }), params);
-    const body = await res.json();
+    const body = (await res.json()) as { status: string };
 
     expect(res.status).toBe(200);
     expect(body.status).toBe("AFTER");

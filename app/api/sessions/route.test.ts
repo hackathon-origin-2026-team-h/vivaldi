@@ -40,7 +40,7 @@ describe("POST /api/sessions", () => {
     });
 
     const res = await POST();
-    const body = await res.json();
+    const body = (await res.json()) as { id: string };
 
     const calledWith = vi.mocked(createSession).mock.calls[0][0];
     expect(typeof calledWith).toBe("string");
