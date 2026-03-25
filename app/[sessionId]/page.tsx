@@ -20,6 +20,7 @@ type DisplaySegment = {
   feedbackError: boolean;
   showOriginal: boolean;
   feedbackInference: string | null;
+  isRepersonalizing: boolean;
 };
 
 const PERSONA_KEY = "vivaldi:userPersona";
@@ -112,6 +113,7 @@ export default function AttendeePage({ params }: { params: Promise<{ sessionId: 
               feedbackError: false,
               showOriginal: false,
               feedbackInference: null,
+              isRepersonalizing: false,
             },
           ];
         });
@@ -147,7 +149,7 @@ export default function AttendeePage({ params }: { params: Promise<{ sessionId: 
     };
   }, [sessionId]);
 
-  const handleFeedback = useCallback(async (segmentId: number, text: string) => {
+  const handleFeedback = useCallback(async (segmentId: number, text: string, polishedText: string) => {
     setSegments((prev) => prev.map((s) => (s.id === segmentId ? { ...s, isFeedbackPending: true } : s)));
     try {
       const res = await fetch("/api/feedback", {
@@ -162,10 +164,30 @@ export default function AttendeePage({ params }: { params: Promise<{ sessionId: 
         setSegments((prev) =>
           prev.map((s) =>
             s.id === segmentId
-              ? { ...s, isFeedbackPending: false, feedbackDone: true, feedbackInference: body.inference }
+              ? {
+                  ...s,
+                  isFeedbackPending: false,
+                  feedbackDone: true,
+                  feedbackInference: body.inference,
+                  isRepersonalizing: true,
+                }
               : s,
           ),
         );
+        // Re-personalize with updated persona reflecting the feedback
+        void fetchPersonalized(polishedText, body.updatedPersona).then(({ text: newText, failed }) => {
+          if (!failed) {
+            setSegments((prev) =>
+              prev.map((s) =>
+                s.id === segmentId
+                  ? { ...s, personalizedText: newText, personalizationState: "done", isRepersonalizing: false }
+                  : s,
+              ),
+            );
+          } else {
+            setSegments((prev) => prev.map((s) => (s.id === segmentId ? { ...s, isRepersonalizing: false } : s)));
+          }
+        });
       } else {
         setSegments((prev) =>
           prev.map((s) => (s.id === segmentId ? { ...s, isFeedbackPending: false, feedbackError: true } : s)),
@@ -334,7 +356,7 @@ export default function AttendeePage({ params }: { params: Promise<{ sessionId: 
                         <button
                           type="button"
                           disabled={seg.isFeedbackPending}
-                          onClick={() => void handleFeedback(seg.id, displayText)}
+                          onClick={() => void handleFeedback(seg.id, displayText, seg.polishedText)}
                           className={[
                             "text-xs px-3 py-1.5 rounded-full border transition-colors",
                             seg.isFeedbackPending
@@ -350,6 +372,12 @@ export default function AttendeePage({ params }: { params: Promise<{ sessionId: 
                           <p>フィードバックを送りました</p>
                           {seg.feedbackInference && (
                             <p className="text-gray-400 leading-relaxed">{seg.feedbackInference}</p>
+                          )}
+                          {seg.isRepersonalizing && (
+                            <p className="text-blue-400 flex items-center gap-1">
+                              <span className="w-1 h-1 rounded-full bg-blue-400 animate-pulse inline-block" />
+                              より分かりやすく意訳し直しています…
+                            </p>
                           )}
                         </div>
                       )}
