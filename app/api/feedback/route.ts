@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getClient } from "@/lib/claude";
+import { extractText, getClient } from "@/lib/claude";
 import { parsePersona } from "@/lib/persona";
 
 const MAX_FEEDBACK_HISTORY = 10;
@@ -41,8 +41,7 @@ ${JSON.stringify(persona)}
       ],
     });
 
-    const block = response.content.find((b) => b.type === "text");
-    const inference = block?.type === "text" ? block.text.trim() : "";
+    const inference = extractText(response);
     const updatedPersona = {
       ...persona,
       feedbackHistory: [...persona.feedbackHistory, { inference, timestamp: Date.now() }].slice(-MAX_FEEDBACK_HISTORY),

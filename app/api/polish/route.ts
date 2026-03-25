@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { polishTranscript } from "@/lib/claude";
+import { polishTranscript } from "@/lib/polish";
 
 const MAX_TEXT_LENGTH = 5000;
 

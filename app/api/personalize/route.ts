@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getClient } from "@/lib/claude";
+import { extractText, getClient } from "@/lib/claude";
 import { parsePersona, type UserPersona } from "@/lib/persona";
 
 function summarizePersona(persona: UserPersona): string {
@@ -55,8 +55,7 @@ ${text}
       ],
     });
 
-    const block = response.content.find((b) => b.type === "text");
-    const personalized = (block?.type === "text" ? block.text.trim() : "") || text;
+    const personalized = extractText(response) || text;
     return NextResponse.json({ personalized });
   } catch (err) {
     console.error("personalize error:", err);
