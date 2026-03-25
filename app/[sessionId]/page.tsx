@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { type UserPersona, defaultPersona, parsePersona } from "@/lib/persona";
+import { defaultPersona, parsePersona, type UserPersona } from "@/lib/persona";
 
 type SessionStatus = "BEFORE" | "DURING" | "AFTER";
 
@@ -75,7 +75,17 @@ export default function AttendeePage({ params }: { params: { sessionId: string }
         const { id, polishedText } = data;
         setSegments((prev) => {
           if (prev.some((s) => s.id === id)) return prev;
-          return [...prev, { id, polishedText, personalizedText: null, isFeedbackPending: false, feedbackDone: false, feedbackError: false }];
+          return [
+            ...prev,
+            {
+              id,
+              polishedText,
+              personalizedText: null,
+              isFeedbackPending: false,
+              feedbackDone: false,
+              feedbackError: false,
+            },
+          ];
         });
         // Personalize in background
         const currentPersona = personaRef.current;
@@ -206,7 +216,9 @@ export default function AttendeePage({ params }: { params: { sessionId: string }
                   <span className="mt-3 inline-block text-xs text-orange-500">フィードバックを送りました</span>
                 )}
                 {seg.feedbackError && (
-                  <span className="mt-3 inline-block text-xs text-red-500">送信に失敗しました。もう一度お試しください</span>
+                  <span className="mt-3 inline-block text-xs text-red-500">
+                    送信に失敗しました。もう一度お試しください
+                  </span>
                 )}
               </div>
             ))}

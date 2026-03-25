@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { gemini } from "@/lib/gemini";
-import { type UserPersona, parsePersona } from "@/lib/persona";
+import { parsePersona, type UserPersona } from "@/lib/persona";
 
 function summarizePersona(persona: UserPersona): string {
   const parts: string[] = [];

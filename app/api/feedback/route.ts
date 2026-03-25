@@ -47,9 +47,7 @@ ${JSON.stringify(persona)}
     const inference = response.text?.trim() ?? "";
     const updatedPersona = {
       ...persona,
-      feedbackHistory: [...persona.feedbackHistory, { inference, timestamp: Date.now() }].slice(
-        -MAX_FEEDBACK_HISTORY,
-      ),
+      feedbackHistory: [...persona.feedbackHistory, { inference, timestamp: Date.now() }].slice(-MAX_FEEDBACK_HISTORY),
     };
 
     return NextResponse.json({ updatedPersona, inference });
