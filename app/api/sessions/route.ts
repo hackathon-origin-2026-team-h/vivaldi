@@ -1,6 +1,6 @@
+import { randomUUID } from "crypto";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { randomUUID } from "crypto";
 
 function generateSessionId(): string {
   return randomUUID();
