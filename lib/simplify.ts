@@ -27,13 +27,16 @@ const SYSTEM_PROMPT = `専門用語・難しい言葉を小学生でもわかる
 
 export async function simplify(text: string): Promise<SimplifiedResult> {
   const message = await getClient().messages.create({
-    model: "claude-sonnet-4-6",
+    model: "claude-haiku-4-5",
     max_tokens: 2048,
     system: SYSTEM_PROMPT,
     messages: [{ role: "user", content: text }],
   });
 
-  const parsed = parseJsonResponse(SimplifyResponseSchema, extractText(message));
+  const parsed = parseJsonResponse(
+    SimplifyResponseSchema,
+    extractText(message),
+  );
 
   return {
     original: text,

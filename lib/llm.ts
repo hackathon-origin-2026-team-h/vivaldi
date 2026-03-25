@@ -1,7 +1,7 @@
 import * as v from "valibot";
 import { extractText, getClient, parseJsonResponse } from "@/lib/claude";
 
-const MODEL = "claude-sonnet-4-20250514";
+const MODEL = "claude-haiku-4-5";
 
 export type PipelineStep = {
   name: string;
@@ -48,7 +48,9 @@ const SimplifyResponseSchema = v.object({
   terms: v.array(v.object({ word: v.string(), explanation: v.string() })),
 });
 
-async function simplifyStep(text: string): Promise<{ output: string; terms: Term[] }> {
+async function simplifyStep(
+  text: string,
+): Promise<{ output: string; terms: Term[] }> {
   const response = await getClient().messages.create({
     model: MODEL,
     max_tokens: 2048,
@@ -63,10 +65,16 @@ async function simplifyStep(text: string): Promise<{ output: string; terms: Term
 }
 
 async function translateStep(text: string): Promise<string> {
-  return callLLM("日本語を自然な英語に翻訳してください。テキストのみ返してください（JSON不要）。", text);
+  return callLLM(
+    "日本語を自然な英語に翻訳してください。テキストのみ返してください（JSON不要）。",
+    text,
+  );
 }
 
-export async function runPipeline(text: string, steps: PipelineStep[]): Promise<PipelineResult> {
+export async function runPipeline(
+  text: string,
+  steps: PipelineStep[],
+): Promise<PipelineResult> {
   const stepResults: PipelineResult["steps"] = [];
   let current = text;
   let terms: Term[] = [];
