@@ -135,10 +135,13 @@ describe("simplify ステップ — JSON パース", () => {
     expect(result.terms).toEqual([]);
   });
 
-  it("不正な JSON の場合エラーをthrowする", async () => {
+  it("不正な JSON の場合は元テキストにフォールバックする", async () => {
     createMock.mockResolvedValue(textResponse("not json"));
 
     const step = getPipelineStep("simplify");
-    await expect(runPipeline("テスト", [step])).rejects.toThrow(SyntaxError);
+    const result = await runPipeline("テスト", [step]);
+
+    expect(result.output).toBe("テスト");
+    expect(result.terms).toEqual([]);
   });
 });
