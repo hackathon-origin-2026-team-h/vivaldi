@@ -66,12 +66,8 @@ async function simplifyStep(text: string): Promise<{ output: string; terms: Term
   });
   const raw = extractText(response);
   if (!raw) return { output: text, terms: [] };
-  try {
-    const parsed = parseJsonResponse(SimplifyResponseSchema, raw);
-    return { output: parsed.text, terms: parsed.terms };
-  } catch {
-    return { output: text, terms: [] };
-  }
+  const parsed = parseJsonResponse(SimplifyResponseSchema, raw);
+  return { output: parsed.text, terms: parsed.terms };
 }
 
 async function translateStep(text: string): Promise<string> {
