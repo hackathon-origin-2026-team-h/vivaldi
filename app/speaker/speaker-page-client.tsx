@@ -11,8 +11,12 @@ type TranscriptSegment = {
   id: number;
   text: string;
   isFinal: boolean;
+  isBuffering?: boolean;
   polished?: string;
 };
+
+const MIN_FLUSH_LENGTH = 20; // chars — flush buffer when accumulated text reaches this length
+const BUFFER_TIMEOUT_MS = 5000; // ms — flush buffer after this idle time
 
 function float32ToInt16(float32: Float32Array): Int16Array {
   const int16 = new Int16Array(float32.length);
@@ -39,7 +43,10 @@ async function fetchPolished(text: string): Promise<string> {
   }
 }
 
-async function patchSessionStatus(sessionId: string, status: "DURING" | "AFTER"): Promise<void> {
+async function patchSessionStatus(
+  sessionId: string,
+  status: "DURING" | "AFTER",
+): Promise<void> {
   try {
     await fetch(`/api/sessions/${sessionId}`, {
       method: "PATCH",
@@ -51,7 +58,11 @@ async function patchSessionStatus(sessionId: string, status: "DURING" | "AFTER")
   }
 }
 
-async function postSegment(sessionId: string, rawText: string, polishedText: string): Promise<void> {
+async function postSegment(
+  sessionId: string,
+  rawText: string,
+  polishedText: string,
+): Promise<void> {
   try {
     await fetch(`/api/sessions/${sessionId}/segments`, {
       method: "POST",
@@ -74,9 +85,15 @@ export default function SpeakerPageClient() {
   const streamRef = useRef<MediaStream | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
-  const socketRef = useRef<{ sendMedia: (d: ArrayBufferLike) => void; close: () => void } | null>(null);
+  const socketRef = useRef<{
+    sendMedia: (d: ArrayBufferLike) => void;
+    close: () => void;
+  } | null>(null);
   const idCounterRef = useRef(0);
   const sessionIdRef = useRef<string | null>(null);
+  const bufferTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const bufferingSegIdRef = useRef<number | null>(null);
+  const bufferTextRef = useRef<string>("");
 
   useEffect(() => {
     void fetch("/api/sessions", { method: "POST" })
@@ -97,7 +114,32 @@ export default function SpeakerPageClient() {
       });
   }, []);
 
+  const flushBuffer = useCallback(() => {
+    if (bufferTimerRef.current) {
+      clearTimeout(bufferTimerRef.current);
+      bufferTimerRef.current = null;
+    }
+    const segId = bufferingSegIdRef.current;
+    const text = bufferTextRef.current;
+    if (segId === null || !text) return;
+    bufferingSegIdRef.current = null;
+    bufferTextRef.current = "";
+    const sid = sessionIdRef.current;
+    setSegments((s) =>
+      s.map((seg) =>
+        seg.id === segId ? { ...seg, isFinal: true, isBuffering: false } : seg,
+      ),
+    );
+    void fetchPolished(text).then((polished) => {
+      setSegments((s) =>
+        s.map((seg) => (seg.id === segId ? { ...seg, polished } : seg)),
+      );
+      if (sid) void postSegment(sid, text, polished);
+    });
+  }, []);
+
   const stopRecording = useCallback(async () => {
+    flushBuffer();
     processorRef.current?.disconnect();
     processorRef.current = null;
     void audioCtxRef.current?.close();
@@ -111,7 +153,7 @@ export default function SpeakerPageClient() {
     if (sessionIdRef.current) {
       await patchSessionStatus(sessionIdRef.current, "AFTER");
     }
-  }, []);
+  }, [flushBuffer]);
 
   const startRecording = useCallback(async () => {
     setError(null);
@@ -121,10 +163,14 @@ export default function SpeakerPageClient() {
       const res = await fetch("/api/transcribe/token", { method: "POST" });
       if (!res.ok) throw new Error("トークンの取得に失敗しました");
       const body = (await res.json()) as { token?: string; error?: string };
-      if (body.error || !body.token) throw new Error(body.error ?? "トークンがありません");
+      if (body.error || !body.token)
+        throw new Error(body.error ?? "トークンがありません");
       const token = body.token;
 
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+        video: false,
+      });
       streamRef.current = stream;
 
       const client = new DeepgramClient({ apiKey: token });
@@ -154,7 +200,11 @@ export default function SpeakerPageClient() {
           audioCtxRef.current = audioCtx;
           const source = audioCtx.createMediaStreamSource(stream);
           // biome-ignore lint/suspicious/noExplicitAny: ScriptProcessor type lacks createScriptProcessor signature in some lib versions
-          const processor = (audioCtx as unknown as any).createScriptProcessor(4096, 1, 1) as ScriptProcessorNode;
+          const processor = (audioCtx as unknown as any).createScriptProcessor(
+            4096,
+            1,
+            1,
+          ) as ScriptProcessorNode;
           processorRef.current = processor;
 
           processor.onaudioprocess = (e: AudioProcessingEvent) => {
@@ -166,8 +216,15 @@ export default function SpeakerPageClient() {
           source.connect(processor);
           processor.connect(audioCtx.destination);
         } catch (error) {
-          console.error("Failed to initialize audio processing after socket open:", error);
-          setError(error instanceof Error ? error.message : "An error occurred while initializing audio recording.");
+          console.error(
+            "Failed to initialize audio processing after socket open:",
+            error,
+          );
+          setError(
+            error instanceof Error
+              ? error.message
+              : "An error occurred while initializing audio recording.",
+          );
           void stopRecording();
         }
       });
@@ -180,36 +237,116 @@ export default function SpeakerPageClient() {
         const newId = idCounterRef.current + 1;
         idCounterRef.current = newId;
 
-        setSegments((prev) => {
-          const lastInterimIdx = prev.findLastIndex((s) => !s.isFinal);
-
-          if (!data.is_final) {
+        if (!data.is_final) {
+          // Interim: only update non-buffering interims
+          setSegments((prev) => {
+            const lastInterimIdx = prev.findLastIndex(
+              (s) => !s.isFinal && !s.isBuffering,
+            );
             if (lastInterimIdx !== -1) {
               const next = [...prev];
-              next[lastInterimIdx] = { ...next[lastInterimIdx], text: transcript };
+              next[lastInterimIdx] = {
+                ...next[lastInterimIdx],
+                text: transcript,
+              };
               return next;
             }
             return [...prev, { id: newId, text: transcript, isFinal: false }];
-          }
+          });
+          return;
+        }
 
+        // Final result
+        const currentBufId = bufferingSegIdRef.current;
+
+        if (currentBufId !== null) {
+          // Currently buffering: append this final to the accumulated text
+          bufferTextRef.current += transcript;
+          const accText = bufferTextRef.current;
+
+          setSegments((prev) => {
+            // Remove any non-buffering interim (superseded by this final)
+            const lastInterimIdx = prev.findLastIndex(
+              (s) => !s.isFinal && !s.isBuffering,
+            );
+            const next =
+              lastInterimIdx !== -1
+                ? prev.filter((_, i) => i !== lastInterimIdx)
+                : [...prev];
+            return next.map((seg) =>
+              seg.id === currentBufId ? { ...seg, text: accText } : seg,
+            );
+          });
+
+          if (bufferTimerRef.current) clearTimeout(bufferTimerRef.current);
+          if (accText.length >= MIN_FLUSH_LENGTH) {
+            flushBuffer();
+          } else {
+            bufferTimerRef.current = setTimeout(flushBuffer, BUFFER_TIMEOUT_MS);
+          }
+          return;
+        }
+
+        // Not currently buffering
+        if (transcript.length < MIN_FLUSH_LENGTH) {
+          // Short text: start buffering
+          let segId = newId;
+          setSegments((prev) => {
+            const lastInterimIdx = prev.findLastIndex(
+              (s) => !s.isFinal && !s.isBuffering,
+            );
+            if (lastInterimIdx !== -1) {
+              segId = prev[lastInterimIdx].id;
+              const next = [...prev];
+              next[lastInterimIdx] = {
+                ...next[lastInterimIdx],
+                text: transcript,
+                isFinal: false,
+                isBuffering: true,
+              };
+              return next;
+            }
+            return [
+              ...prev,
+              {
+                id: newId,
+                text: transcript,
+                isFinal: false,
+                isBuffering: true,
+              },
+            ];
+          });
+          bufferingSegIdRef.current = segId;
+          bufferTextRef.current = transcript;
+          if (bufferTimerRef.current) clearTimeout(bufferTimerRef.current);
+          bufferTimerRef.current = setTimeout(flushBuffer, BUFFER_TIMEOUT_MS);
+          return;
+        }
+
+        // Long enough: process immediately
+        let segId = newId;
+        setSegments((prev) => {
+          const lastInterimIdx = prev.findLastIndex(
+            (s) => !s.isFinal && !s.isBuffering,
+          );
           if (lastInterimIdx !== -1) {
+            segId = prev[lastInterimIdx].id;
             const next = [...prev];
-            next[lastInterimIdx] = { ...next[lastInterimIdx], text: transcript, isFinal: true };
-            const targetId = next[lastInterimIdx].id;
-            const sid = sessionIdRef.current;
-            void fetchPolished(transcript).then((polished) => {
-              setSegments((s) => s.map((seg) => (seg.id === targetId ? { ...seg, polished } : seg)));
-              if (sid) void postSegment(sid, transcript, polished);
-            });
+            next[lastInterimIdx] = {
+              ...next[lastInterimIdx],
+              text: transcript,
+              isFinal: true,
+            };
             return next;
           }
-
-          const sid = sessionIdRef.current;
-          void fetchPolished(transcript).then((polished) => {
-            setSegments((s) => s.map((seg) => (seg.id === newId ? { ...seg, polished } : seg)));
-            if (sid) void postSegment(sid, transcript, polished);
-          });
           return [...prev, { id: newId, text: transcript, isFinal: true }];
+        });
+        const sid = sessionIdRef.current;
+        void fetchPolished(transcript).then((polished) => {
+          setSegments((s) =>
+            s.map((seg) => (seg.id === segId ? { ...seg, polished } : seg)),
+          );
+          if (sid) void postSegment(sid, transcript, polished);
         });
       });
 
@@ -224,10 +361,12 @@ export default function SpeakerPageClient() {
 
       socket.connect();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "不明なエラーが発生しました");
+      setError(
+        err instanceof Error ? err.message : "不明なエラーが発生しました",
+      );
       void stopRecording();
     }
-  }, [stopRecording]);
+  }, [stopRecording, flushBuffer]);
 
   const isRecording = status === "recording";
   const isConnecting = status === "connecting";
@@ -235,8 +374,12 @@ export default function SpeakerPageClient() {
   return (
     <main className="min-h-screen bg-gray-50 p-8">
       <div className="mx-auto max-w-2xl">
-        <h1 className="mb-1 text-2xl font-bold text-gray-900">音声書き起こし</h1>
-        <p className="mb-8 text-sm text-gray-500">マイクからの音声をリアルタイムで文字起こしします</p>
+        <h1 className="mb-1 text-2xl font-bold text-gray-900">
+          音声書き起こし
+        </h1>
+        <p className="mb-8 text-sm text-gray-500">
+          マイクからの音声をリアルタイムで文字起こしします
+        </p>
 
         {sessionId && (
           <div className="mb-6 flex flex-col items-center gap-6 rounded-xl border border-gray-200 bg-white p-6 sm:flex-row">
@@ -255,9 +398,17 @@ export default function SpeakerPageClient() {
               </div>
             )}
             <div className="min-w-0">
-              <p className="mb-1 text-sm font-medium text-gray-700">聴講者URL</p>
-              {audienceUrl && <p className="break-all font-mono text-xs text-gray-500">{audienceUrl}</p>}
-              <p className="mt-2 text-xs text-gray-400">このQRコードを聴講者にスキャンしてもらってください</p>
+              <p className="mb-1 text-sm font-medium text-gray-700">
+                聴講者URL
+              </p>
+              {audienceUrl && (
+                <p className="break-all font-mono text-xs text-gray-500">
+                  {audienceUrl}
+                </p>
+              )}
+              <p className="mt-2 text-xs text-gray-400">
+                このQRコードを聴講者にスキャンしてもらってください
+              </p>
             </div>
           </div>
         )}
@@ -265,7 +416,11 @@ export default function SpeakerPageClient() {
         <div className="mb-6 flex items-center gap-4">
           <button
             type="button"
-            onClick={isRecording ? () => void stopRecording() : () => void startRecording()}
+            onClick={
+              isRecording
+                ? () => void stopRecording()
+                : () => void startRecording()
+            }
             disabled={isConnecting || !sessionId}
             className={[
               "rounded-lg px-6 py-2.5 text-sm font-semibold text-white transition-colors",
@@ -283,7 +438,11 @@ export default function SpeakerPageClient() {
             <span
               className={[
                 "h-2.5 w-2.5 rounded-full",
-                isRecording ? "animate-pulse bg-red-500" : isConnecting ? "animate-pulse bg-yellow-400" : "bg-gray-300",
+                isRecording
+                  ? "animate-pulse bg-red-500"
+                  : isConnecting
+                    ? "animate-pulse bg-yellow-400"
+                    : "bg-gray-300",
               ].join(" ")}
             />
             <span className="text-sm text-gray-600">
@@ -295,12 +454,16 @@ export default function SpeakerPageClient() {
         </div>
 
         {error !== null && (
-          <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>
+          <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            {error}
+          </div>
         )}
 
         <div className="min-h-48 rounded-xl border border-gray-200 bg-white p-6">
           {segments.length === 0 ? (
-            <p className="pt-8 text-center text-sm text-gray-400">「録音開始」を押すと書き起こしがここに表示されます</p>
+            <p className="pt-8 text-center text-sm text-gray-400">
+              「録音開始」を押すと書き起こしがここに表示されます
+            </p>
           ) : (
             <div className="space-y-1">
               {segments.map((seg) => (
