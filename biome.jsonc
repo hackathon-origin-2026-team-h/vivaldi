@@ -82,7 +82,7 @@
   },
   "overrides": [
     {
-      "includes": ["**/*.tsx", "**/*.ts"],
+      "includes": ["**/*.tsx", "**/*.ts", "**/*.jsx", "**/*.js", "**/*.mjs"],
       "linter": {
         "rules": {
           "style": {

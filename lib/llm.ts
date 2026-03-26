@@ -1,7 +1,7 @@
 import * as v from "valibot";
 import { extractText, getClient, parseJsonResponse } from "@/lib/claude";
 
-const MODEL = "claude-sonnet-4-20250514";
+const MODEL = "claude-haiku-4-5-20251001";
 
 export type PipelineStep = {
   name: string;
@@ -26,19 +26,27 @@ export type PipelineResult = {
   terms: Term[];
 };
 
-async function callLLM(system: string, text: string): Promise<string> {
+const TextResultSchema = v.object({ result: v.string() });
+
+async function callLLMJson(system: string, text: string): Promise<string> {
   const response = await getClient().messages.create({
     model: MODEL,
     max_tokens: 2048,
     system,
     messages: [{ role: "user", content: text }],
   });
-  return extractText(response) || text;
+  try {
+    const raw = extractText(response);
+    const parsed = parseJsonResponse(TextResultSchema, raw);
+    return parsed.result;
+  } catch {
+    return text;
+  }
 }
 
 async function removeFillersStep(text: string): Promise<string> {
-  return callLLM(
-    "「えー」「あの」「まあ」「えっと」などの言い淀みを除去してください。意味のある言葉は一切変えないこと。テキストのみ返してください（JSON不要）。",
+  return callLLMJson(
+    '「えー」「あの」「まあ」「えっと」などの言い淀みを除去してください。意味のある言葉は一切変えないこと。以下のJSON形式のみで返してください（前置きテキスト不要）:\n{"result": "修正後のテキスト"}ただし、テキストが提供されていない、もしくは修正の必要がない場合は、元のテキストをそのまま返してください。',
     text,
   );
 }
@@ -58,12 +66,19 @@ async function simplifyStep(text: string): Promise<{ output: string; terms: Term
   });
   const raw = extractText(response);
   if (!raw) return { output: text, terms: [] };
-  const parsed = parseJsonResponse(SimplifyResponseSchema, raw);
-  return { output: parsed.text, terms: parsed.terms };
+  try {
+    const parsed = parseJsonResponse(SimplifyResponseSchema, raw);
+    return { output: parsed.text, terms: parsed.terms };
+  } catch {
+    return { output: text, terms: [] };
+  }
 }
 
 async function translateStep(text: string): Promise<string> {
-  return callLLM("日本語を自然な英語に翻訳してください。テキストのみ返してください（JSON不要）。", text);
+  return callLLMJson(
+    '日本語を自然な英語に翻訳してください。以下のJSON形式のみで返してください（前置きテキスト不要）:\n{"result": "翻訳後のテキスト"}',
+    text,
+  );
 }
 
 export async function runPipeline(text: string, steps: PipelineStep[]): Promise<PipelineResult> {

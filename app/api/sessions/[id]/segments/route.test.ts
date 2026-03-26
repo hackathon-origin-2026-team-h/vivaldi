@@ -2,17 +2,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { POST } from "./route";
 
-vi.mock("@/lib/prisma", () => ({
-  prisma: {
-    transcriptSegment: {
-      create: vi.fn(),
-    },
-  },
+const mockStub = { fetch: vi.fn() };
+
+vi.mock("@opennextjs/cloudflare", () => ({
+  getCloudflareContext: vi.fn(() => Promise.resolve({ env: {} })),
 }));
 
-import { prisma } from "@/lib/prisma";
-
-const mockCreate = () => vi.mocked(prisma.transcriptSegment.create);
+vi.mock("@/lib/session", () => ({
+  getSessionStub: vi.fn(() => mockStub),
+}));
 
 const makeRequest = (body: unknown) =>
   new Request("http://localhost/api/sessions/abc/segments", {
@@ -29,13 +27,18 @@ describe("POST /api/sessions/[id]/segments", () => {
   });
 
   it("セグメントを作成して 201 を返す", async () => {
-    mockCreate().mockResolvedValueOnce({
-      id: 1,
-      sessionId: "abc",
-      rawText: "えっと、今日は",
-      polishedText: "今日は",
-      createdAt: new Date(),
-    } as never);
+    mockStub.fetch.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          id: 1,
+          sessionId: "abc",
+          rawText: "えっと、今日は",
+          polishedText: "今日は",
+          createdAt: new Date().toISOString(),
+        }),
+        { status: 200 },
+      ),
+    );
 
     const res = await POST(makeRequest({ rawText: "えっと、今日は", polishedText: "今日は" }), params);
     const body = await res.json();
@@ -50,7 +53,7 @@ describe("POST /api/sessions/[id]/segments", () => {
 
     expect(res.status).toBe(400);
     expect(body).toHaveProperty("error");
-    expect(mockCreate()).not.toHaveBeenCalled();
+    expect(mockStub.fetch).not.toHaveBeenCalled();
   });
 
   it("polishedText が空なら 400 を返す", async () => {
@@ -59,11 +62,11 @@ describe("POST /api/sessions/[id]/segments", () => {
 
     expect(res.status).toBe(400);
     expect(body).toHaveProperty("error");
-    expect(mockCreate()).not.toHaveBeenCalled();
+    expect(mockStub.fetch).not.toHaveBeenCalled();
   });
 
   it("存在しないセッションは 404 を返す", async () => {
-    mockCreate().mockRejectedValueOnce(Object.assign(new Error("FK constraint failed"), { code: "P2003" }));
+    mockStub.fetch.mockResolvedValueOnce(new Response(null, { status: 404 }));
 
     const res = await POST(makeRequest({ rawText: "えっと", polishedText: "今日は" }), params);
     const body = await res.json();

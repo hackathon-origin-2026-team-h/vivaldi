@@ -110,8 +110,8 @@ export default function SpeakerPage() {
   useEffect(() => {
     void fetch("/api/sessions", { method: "POST" })
       .then((res) => res.json())
-      .then(async (body: { id: string }) => {
-        const id = body.id;
+      .then(async (body) => {
+        const { id } = body as { id: string };
         setSessionId(id);
         sessionIdRef.current = id;
 
@@ -247,6 +247,13 @@ export default function SpeakerPage() {
       });
 
       socket.on("close", () => {
+        processorRef.current?.disconnect();
+        processorRef.current = null;
+        void audioCtxRef.current?.close();
+        audioCtxRef.current = null;
+        for (const t of streamRef.current?.getTracks() ?? []) t.stop();
+        streamRef.current = null;
+        socketRef.current = null;
         setStatus("idle");
       });
 

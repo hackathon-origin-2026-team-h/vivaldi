@@ -11,8 +11,12 @@ type TranscriptSegment = {
   id: number;
   text: string;
   isFinal: boolean;
+  isBuffering?: boolean;
   polished?: string;
 };
+
+const MIN_FLUSH_LENGTH = 20; // chars — flush buffer when accumulated text reaches this length
+const BUFFER_TIMEOUT_MS = 5000; // ms — flush buffer after this idle time
 
 function float32ToInt16(float32: Float32Array): Int16Array {
   const int16 = new Int16Array(float32.length);
@@ -74,15 +78,21 @@ export default function SpeakerPageClient() {
   const streamRef = useRef<MediaStream | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
-  const socketRef = useRef<{ sendMedia: (d: ArrayBufferLike) => void; close: () => void } | null>(null);
+  const socketRef = useRef<{
+    sendMedia: (d: ArrayBufferLike) => void;
+    close: () => void;
+  } | null>(null);
   const idCounterRef = useRef(0);
   const sessionIdRef = useRef<string | null>(null);
+  const bufferTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const bufferingSegIdRef = useRef<number | null>(null);
+  const bufferTextRef = useRef<string>("");
 
   useEffect(() => {
     void fetch("/api/sessions", { method: "POST" })
       .then((res) => res.json())
-      .then(async (body: { id: string }) => {
-        const id = body.id;
+      .then(async (body: unknown) => {
+        const { id } = body as { id: string };
         setSessionId(id);
         sessionIdRef.current = id;
 
@@ -97,7 +107,26 @@ export default function SpeakerPageClient() {
       });
   }, []);
 
+  const flushBuffer = useCallback(() => {
+    if (bufferTimerRef.current) {
+      clearTimeout(bufferTimerRef.current);
+      bufferTimerRef.current = null;
+    }
+    const segId = bufferingSegIdRef.current;
+    const text = bufferTextRef.current;
+    if (segId === null || !text) return;
+    bufferingSegIdRef.current = null;
+    bufferTextRef.current = "";
+    const sid = sessionIdRef.current;
+    setSegments((s) => s.map((seg) => (seg.id === segId ? { ...seg, isFinal: true, isBuffering: false } : seg)));
+    void fetchPolished(text).then((polished) => {
+      setSegments((s) => s.map((seg) => (seg.id === segId ? { ...seg, polished } : seg)));
+      if (sid) void postSegment(sid, text, polished);
+    });
+  }, []);
+
   const stopRecording = useCallback(async () => {
+    flushBuffer();
     processorRef.current?.disconnect();
     processorRef.current = null;
     void audioCtxRef.current?.close();
@@ -111,7 +140,7 @@ export default function SpeakerPageClient() {
     if (sessionIdRef.current) {
       await patchSessionStatus(sessionIdRef.current, "AFTER");
     }
-  }, []);
+  }, [flushBuffer]);
 
   const startRecording = useCallback(async () => {
     setError(null);
@@ -124,7 +153,10 @@ export default function SpeakerPageClient() {
       if (body.error || !body.token) throw new Error(body.error ?? "トークンがありません");
       const token = body.token;
 
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+        video: false,
+      });
       streamRef.current = stream;
 
       const client = new DeepgramClient({ apiKey: token });
@@ -180,36 +212,101 @@ export default function SpeakerPageClient() {
         const newId = idCounterRef.current + 1;
         idCounterRef.current = newId;
 
-        setSegments((prev) => {
-          const lastInterimIdx = prev.findLastIndex((s) => !s.isFinal);
-
-          if (!data.is_final) {
+        if (!data.is_final) {
+          // Interim: only update non-buffering interims
+          setSegments((prev) => {
+            const lastInterimIdx = prev.findLastIndex((s) => !s.isFinal && !s.isBuffering);
             if (lastInterimIdx !== -1) {
               const next = [...prev];
-              next[lastInterimIdx] = { ...next[lastInterimIdx], text: transcript };
+              next[lastInterimIdx] = {
+                ...next[lastInterimIdx],
+                text: transcript,
+              };
               return next;
             }
             return [...prev, { id: newId, text: transcript, isFinal: false }];
-          }
+          });
+          return;
+        }
 
+        // Final result
+        const currentBufId = bufferingSegIdRef.current;
+
+        if (currentBufId !== null) {
+          // Currently buffering: append this final to the accumulated text
+          bufferTextRef.current += transcript;
+          const accText = bufferTextRef.current;
+
+          setSegments((prev) => {
+            // Remove any non-buffering interim (superseded by this final)
+            const lastInterimIdx = prev.findLastIndex((s) => !s.isFinal && !s.isBuffering);
+            const next = lastInterimIdx !== -1 ? prev.filter((_, i) => i !== lastInterimIdx) : [...prev];
+            return next.map((seg) => (seg.id === currentBufId ? { ...seg, text: accText } : seg));
+          });
+
+          if (bufferTimerRef.current) clearTimeout(bufferTimerRef.current);
+          if (accText.length >= MIN_FLUSH_LENGTH) {
+            flushBuffer();
+          } else {
+            bufferTimerRef.current = setTimeout(flushBuffer, BUFFER_TIMEOUT_MS);
+          }
+          return;
+        }
+
+        // Not currently buffering
+        if (transcript.length < MIN_FLUSH_LENGTH) {
+          // Short text: start buffering
+          let segId = newId;
+          setSegments((prev) => {
+            const lastInterimIdx = prev.findLastIndex((s) => !s.isFinal && !s.isBuffering);
+            if (lastInterimIdx !== -1) {
+              segId = prev[lastInterimIdx].id;
+              const next = [...prev];
+              next[lastInterimIdx] = {
+                ...next[lastInterimIdx],
+                text: transcript,
+                isFinal: false,
+                isBuffering: true,
+              };
+              return next;
+            }
+            return [
+              ...prev,
+              {
+                id: newId,
+                text: transcript,
+                isFinal: false,
+                isBuffering: true,
+              },
+            ];
+          });
+          bufferingSegIdRef.current = segId;
+          bufferTextRef.current = transcript;
+          if (bufferTimerRef.current) clearTimeout(bufferTimerRef.current);
+          bufferTimerRef.current = setTimeout(flushBuffer, BUFFER_TIMEOUT_MS);
+          return;
+        }
+
+        // Long enough: process immediately
+        let segId = newId;
+        setSegments((prev) => {
+          const lastInterimIdx = prev.findLastIndex((s) => !s.isFinal && !s.isBuffering);
           if (lastInterimIdx !== -1) {
+            segId = prev[lastInterimIdx].id;
             const next = [...prev];
-            next[lastInterimIdx] = { ...next[lastInterimIdx], text: transcript, isFinal: true };
-            const targetId = next[lastInterimIdx].id;
-            const sid = sessionIdRef.current;
-            void fetchPolished(transcript).then((polished) => {
-              setSegments((s) => s.map((seg) => (seg.id === targetId ? { ...seg, polished } : seg)));
-              if (sid) void postSegment(sid, transcript, polished);
-            });
+            next[lastInterimIdx] = {
+              ...next[lastInterimIdx],
+              text: transcript,
+              isFinal: true,
+            };
             return next;
           }
-
-          const sid = sessionIdRef.current;
-          void fetchPolished(transcript).then((polished) => {
-            setSegments((s) => s.map((seg) => (seg.id === newId ? { ...seg, polished } : seg)));
-            if (sid) void postSegment(sid, transcript, polished);
-          });
           return [...prev, { id: newId, text: transcript, isFinal: true }];
+        });
+        const sid = sessionIdRef.current;
+        void fetchPolished(transcript).then((polished) => {
+          setSegments((s) => s.map((seg) => (seg.id === segId ? { ...seg, polished } : seg)));
+          if (sid) void postSegment(sid, transcript, polished);
         });
       });
 
@@ -227,7 +324,7 @@ export default function SpeakerPageClient() {
       setError(err instanceof Error ? err.message : "不明なエラーが発生しました");
       void stopRecording();
     }
-  }, [stopRecording]);
+  }, [stopRecording, flushBuffer]);
 
   const isRecording = status === "recording";
   const isConnecting = status === "connecting";

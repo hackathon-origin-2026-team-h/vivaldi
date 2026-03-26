@@ -53,6 +53,7 @@ export default function AttendeePageClient({ sessionId }: AttendeePageClientProp
   const measureRawRef = useRef<HTMLParagraphElement>(null);
   const measureDisplayRef = useRef<HTMLParagraphElement>(null);
   const personaRef = useRef<UserPersona>(defaultPersona);
+  const seenSegmentIdsRef = useRef(new Set<number>());
   const touchStartYRef = useRef<number | null>(null);
   const transitionTimelineRef = useRef<gsap.core.Timeline | null>(null);
   const isTransitioningRef = useRef(false);
@@ -554,43 +555,66 @@ export default function AttendeePageClient({ sessionId }: AttendeePageClientProp
       return;
     }
 
-    const eventSource = new EventSource(`/api/sessions/${sessionId}/stream`);
+    let eventSource: EventSource | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let stopped = false;
 
-    eventSource.onmessage = (event) => {
-      const data = JSON.parse(event.data as string) as SessionStreamEvent;
+    const connect = () => {
+      if (stopped) return;
 
-      if (data.type === "session") {
-        setSessionStatus(data.status);
-        return;
-      }
+      eventSource = new EventSource(`/api/sessions/${sessionId}/stream`);
 
-      setSegments((current) => {
-        if (current.some((segment) => segment.id === data.id)) {
-          return current;
+      eventSource.onmessage = (event) => {
+        const data = JSON.parse(event.data as string) as SessionStreamEvent;
+
+        if (data.type === "session") {
+          setSessionStatus(data.status);
+          return;
         }
 
-        return [...current, createIncomingSegment(data)];
-      });
+        if (seenSegmentIdsRef.current.has(data.id)) {
+          return;
+        }
+        seenSegmentIdsRef.current.add(data.id);
 
-      personalizeSegment(data.id, data.polishedText);
-    };
-
-    eventSource.onerror = () => {
-      eventSource.close();
-
-      void fetch(`/api/sessions/${sessionId}`)
-        .then((response) => {
-          if (response.status === 404) {
-            setNotFound(true);
+        setSegments((current) => {
+          if (current.some((segment) => segment.id === data.id)) {
+            return current;
           }
-        })
-        .catch(() => {
-          // Transient network errors should not show a hard 404 state.
+          return [...current, createIncomingSegment(data)];
         });
+
+        personalizeSegment(data.id, data.polishedText);
+      };
+
+      eventSource.onerror = () => {
+        eventSource?.close();
+        eventSource = null;
+
+        if (stopped) return;
+
+        void fetch(`/api/sessions/${sessionId}`)
+          .then((response) => {
+            if (response.status === 404) {
+              setNotFound(true);
+              return;
+            }
+            reconnectTimer = setTimeout(connect, 2000);
+          })
+          .catch(() => {
+            reconnectTimer = setTimeout(connect, 2000);
+          });
+      };
     };
+
+    connect();
 
     return () => {
-      eventSource.close();
+      stopped = true;
+      if (reconnectTimer !== null) {
+        clearTimeout(reconnectTimer);
+      }
+      eventSource?.close();
     };
   }, [isMounted, sessionId]);
 
