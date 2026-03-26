@@ -56,9 +56,7 @@ const SimplifyResponseSchema = v.object({
   terms: v.array(v.object({ word: v.string(), explanation: v.string() })),
 });
 
-async function simplifyStep(
-  text: string,
-): Promise<{ output: string; terms: Term[] }> {
+async function simplifyStep(text: string): Promise<{ output: string; terms: Term[] }> {
   const response = await getClient().messages.create({
     model: MODEL,
     max_tokens: 2048,
@@ -83,10 +81,7 @@ async function translateStep(text: string): Promise<string> {
   );
 }
 
-export async function runPipeline(
-  text: string,
-  steps: PipelineStep[],
-): Promise<PipelineResult> {
+export async function runPipeline(text: string, steps: PipelineStep[]): Promise<PipelineResult> {
   const stepResults: PipelineResult["steps"] = [];
   let current = text;
   let terms: Term[] = [];

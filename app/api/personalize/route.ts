@@ -1,10 +1,6 @@
 import { NextResponse } from "next/server";
 import * as v from "valibot";
-import {
-  handleApiError,
-  parseBody,
-  TextWithPersonaBodySchema,
-} from "@/lib/api";
+import { handleApiError, parseBody, TextWithPersonaBodySchema } from "@/lib/api";
 import { extractText, getClient, parseJsonResponse } from "@/lib/claude";
 import { parsePersona, type UserPersona } from "@/lib/persona";
 
