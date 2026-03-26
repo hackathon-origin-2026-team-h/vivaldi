@@ -46,7 +46,7 @@ async function callLLMJson(system: string, text: string): Promise<string> {
 
 async function removeFillersStep(text: string): Promise<string> {
   return callLLMJson(
-    '「えー」「あの」「まあ」「えっと」などの言い淀みを除去してください。意味のある言葉は一切変えないこと。以下のJSON形式のみで返してください（前置きテキスト不要）:\n{"result": "修正後のテキスト"}',
+    '「えー」「あの」「まあ」「えっと」などの言い淀みを除去してください。意味のある言葉は一切変えないこと。以下のJSON形式のみで返してください（前置きテキスト不要）:\n{"result": "修正後のテキスト"}ただし、テキストが提供されていない、もしくは修正の必要がない場合は、元のテキストをそのまま返してください。',
     text,
   );
 }
@@ -56,7 +56,9 @@ const SimplifyResponseSchema = v.object({
   terms: v.array(v.object({ word: v.string(), explanation: v.string() })),
 });
 
-async function simplifyStep(text: string): Promise<{ output: string; terms: Term[] }> {
+async function simplifyStep(
+  text: string,
+): Promise<{ output: string; terms: Term[] }> {
   const response = await getClient().messages.create({
     model: MODEL,
     max_tokens: 2048,
@@ -81,7 +83,10 @@ async function translateStep(text: string): Promise<string> {
   );
 }
 
-export async function runPipeline(text: string, steps: PipelineStep[]): Promise<PipelineResult> {
+export async function runPipeline(
+  text: string,
+  steps: PipelineStep[],
+): Promise<PipelineResult> {
   const stepResults: PipelineResult["steps"] = [];
   let current = text;
   let terms: Term[] = [];
