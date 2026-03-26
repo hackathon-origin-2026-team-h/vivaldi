@@ -1,7 +1,7 @@
 import * as v from "valibot";
 import { extractText, getClient, parseJsonResponse } from "@/lib/claude";
 
-const MODEL = "claude-haiku-4-5";
+const MODEL = "claude-haiku-4-5-20251001";
 
 export type PipelineStep = {
   name: string;
@@ -66,8 +66,12 @@ async function simplifyStep(text: string): Promise<{ output: string; terms: Term
   });
   const raw = extractText(response);
   if (!raw) return { output: text, terms: [] };
-  const parsed = parseJsonResponse(SimplifyResponseSchema, raw);
-  return { output: parsed.text, terms: parsed.terms };
+  try {
+    const parsed = parseJsonResponse(SimplifyResponseSchema, raw);
+    return { output: parsed.text, terms: parsed.terms };
+  } catch {
+    return { output: text, terms: [] };
+  }
 }
 
 async function translateStep(text: string): Promise<string> {
