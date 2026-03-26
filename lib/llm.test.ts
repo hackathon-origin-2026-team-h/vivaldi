@@ -89,7 +89,7 @@ describe("runPipeline", () => {
 
 describe("removeFillers ステップ", () => {
   it("Claude のレスポンスをそのまま output にする", async () => {
-    createMock.mockResolvedValue(textResponse("言い淀みを除去した文章"));
+    createMock.mockResolvedValue(textResponse('{"result": "言い淀みを除去した文章"}'));
 
     const step = getPipelineStep("removeFillers");
     const result = await runPipeline("えーと、難しいテキスト", [step]);
@@ -114,7 +114,7 @@ describe("translate ステップ", () => {
   });
 
   it("enabled にすると Claude のレスポンスを返す", async () => {
-    createMock.mockResolvedValue(textResponse("Translated text"));
+    createMock.mockResolvedValue(textResponse('{"result": "Translated text"}'));
 
     const step = { ...getPipelineStep("translate"), enabled: true };
     const result = await runPipeline("日本語テキスト", [step]);
