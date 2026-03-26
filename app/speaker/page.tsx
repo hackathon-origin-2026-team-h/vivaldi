@@ -246,6 +246,13 @@ export default function SpeakerPage() {
       });
 
       socket.on("close", () => {
+        processorRef.current?.disconnect();
+        processorRef.current = null;
+        void audioCtxRef.current?.close();
+        audioCtxRef.current = null;
+        for (const t of streamRef.current?.getTracks() ?? []) t.stop();
+        streamRef.current = null;
+        socketRef.current = null;
         setStatus("idle");
       });
 
