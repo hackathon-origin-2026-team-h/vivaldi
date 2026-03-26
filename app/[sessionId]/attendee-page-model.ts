@@ -5,7 +5,7 @@ import { defaultPersona, parsePersona, type UserPersona } from "@/lib/persona";
 export const PERSONA_KEY = "vivaldi:userPersona";
 export const PAGE_TOP_PADDING = 28;
 export const PAGE_BOTTOM_PADDING = 24;
-export const THINKMAN_HEAD_CLEARANCE = 258;
+export const THINKMAN_HEAD_CLEARANCE = 190;
 export const PAGE_SEGMENT_GAP = 26;
 export const ENDED_LABEL_RESERVED_HEIGHT = 40;
 export const PAGE_BREAK_BUFFER = 36;

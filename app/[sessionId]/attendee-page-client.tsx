@@ -4,9 +4,18 @@ import { gsap } from "gsap";
 import { type RefObject, useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "react";
 import { defaultPersona, type UserPersona } from "@/lib/persona";
 import {
+  clampPageIndex,
+  createMeasureChunkHeight,
+  getAvailablePageHeight,
+  getRenderWindow,
+  getTrackOffset,
+  MANUAL_NAVIGATION_LOCK_MS,
+  normalizeTranscriptPages,
+  syncActivePage,
+} from "./attendee-page-layout";
+import {
   createIncomingSegment,
   type DisplaySegment,
-  ENDED_LABEL_RESERVED_HEIGHT,
   fetchFeedback,
   fetchPersonalized,
   fetchPersonalizedResult,
@@ -14,17 +23,12 @@ import {
   loadPersona,
   MIN_SWIPE_DELTA,
   MIN_WHEEL_DELTA,
-  PAGE_BOTTOM_PADDING,
-  PAGE_BREAK_BUFFER,
-  PAGE_TOP_PADDING,
   type SessionStatus,
   savePersona,
-  THINKMAN_HEAD_CLEARANCE,
   type TranscriptPage,
-  type TranscriptPageDraft,
   updateSegmentInList,
 } from "./attendee-page-model";
-import { buildPages, haveSamePagination, type MeasureChunkHeight } from "./attendee-page-pagination";
+import { buildPages, haveSamePagination } from "./attendee-page-pagination";
 import {
   AttendeeNotFound,
   AttendeeViewport,
@@ -40,9 +44,6 @@ type AttendeePageClientProps = {
 type SessionStreamEvent =
   | { type: "session"; status: SessionStatus }
   | { type: "segment"; id: number; polishedText: string; rawText: string };
-
-const PAGE_RENDER_WINDOW_RADIUS = 1;
-const MANUAL_NAVIGATION_LOCK_MS = 520;
 
 export default function AttendeePageClient({ sessionId }: AttendeePageClientProps) {
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -72,20 +73,23 @@ export default function AttendeePageClient({ sessionId }: AttendeePageClientProp
   const [transcriptPages, setTranscriptPages] = useState<TranscriptPage[]>([]);
   const [understoodBubbleNonce, setUnderstoodBubbleNonce] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(0);
+  const [viewportWidth, setViewportWidth] = useState(0);
   const renderWindow = getRenderWindow(activePageIndex, transcriptPages.length);
   const renderedPages = transcriptPages.slice(renderWindow.start, renderWindow.endExclusive);
+
+  const updateSegment = useEffectEvent((segmentId: number, updater: (segment: DisplaySegment) => DisplaySegment) => {
+    setSegments((current) => updateSegmentInList(current, segmentId, updater));
+  });
 
   const personalizeSegment = useEffectEvent((segmentId: number, text: string) => {
     const currentPersona = personaRef.current;
 
     void fetchPersonalized(text, currentPersona).then((personalizedText) => {
-      setSegments((current) =>
-        updateSegmentInList(current, segmentId, (segment) => ({
-          ...segment,
-          personalizedText,
-          isPersonalizing: false,
-        })),
-      );
+      updateSegment(segmentId, (segment) => ({
+        ...segment,
+        personalizedText,
+        isPersonalizing: false,
+      }));
     });
   });
 
@@ -112,49 +116,41 @@ export default function AttendeePageClient({ sessionId }: AttendeePageClientProp
     const feedbackText = getDisplayedSegmentText(targetSegment);
     const currentPersona = personaRef.current;
 
-    setSegments((current) =>
-      updateSegmentInList(current, segmentId, (segment) => ({
-        ...segment,
-        isFeedbackPending: true,
-        feedbackError: false,
-      })),
-    );
+    updateSegment(segmentId, (segment) => ({
+      ...segment,
+      isFeedbackPending: true,
+      feedbackError: false,
+    }));
 
     void fetchFeedback(feedbackText, currentPersona).then((feedbackResult) => {
       if (!feedbackResult) {
-        setSegments((current) =>
-          updateSegmentInList(current, segmentId, (segment) => ({
-            ...segment,
-            isFeedbackPending: false,
-            feedbackError: true,
-          })),
-        );
+        updateSegment(segmentId, (segment) => ({
+          ...segment,
+          isFeedbackPending: false,
+          feedbackError: true,
+        }));
         return;
       }
 
       personaRef.current = feedbackResult.updatedPersona;
       savePersona(feedbackResult.updatedPersona);
 
-      setSegments((current) =>
-        updateSegmentInList(current, segmentId, (segment) => ({
-          ...segment,
-          isFeedbackPending: false,
-          feedbackDone: true,
-          feedbackError: false,
-          feedbackInference: feedbackResult.inference,
-          isRepersonalizing: true,
-        })),
-      );
+      updateSegment(segmentId, (segment) => ({
+        ...segment,
+        isFeedbackPending: false,
+        feedbackDone: true,
+        feedbackError: false,
+        feedbackInference: feedbackResult.inference,
+        isRepersonalizing: true,
+      }));
 
       void fetchPersonalizedResult(targetSegment.polishedText, feedbackResult.updatedPersona).then(
         ({ failed, text: clarifiedText }) => {
-          setSegments((current) =>
-            updateSegmentInList(current, segmentId, (segment) => ({
-              ...segment,
-              clarifiedText: failed ? segment.clarifiedText : clarifiedText,
-              isRepersonalizing: false,
-            })),
-          );
+          updateSegment(segmentId, (segment) => ({
+            ...segment,
+            clarifiedText: failed ? segment.clarifiedText : clarifiedText,
+            isRepersonalizing: false,
+          }));
         },
       );
     });
@@ -369,11 +365,12 @@ export default function AttendeePageClient({ sessionId }: AttendeePageClientProp
       return;
     }
 
-    const updateViewportHeight = () => {
+    const updateViewportSize = () => {
       setViewportHeight(viewportRef.current?.clientHeight ?? 0);
+      setViewportWidth(viewportRef.current?.clientWidth ?? 0);
     };
 
-    updateViewportHeight();
+    updateViewportSize();
 
     const viewportNode = viewportRef.current;
     if (!viewportNode) {
@@ -381,7 +378,7 @@ export default function AttendeePageClient({ sessionId }: AttendeePageClientProp
     }
 
     if (typeof ResizeObserver !== "undefined") {
-      const resizeObserver = new ResizeObserver(updateViewportHeight);
+      const resizeObserver = new ResizeObserver(updateViewportSize);
       resizeObserver.observe(viewportNode);
 
       return () => {
@@ -389,9 +386,9 @@ export default function AttendeePageClient({ sessionId }: AttendeePageClientProp
       };
     }
 
-    window.addEventListener("resize", updateViewportHeight);
+    window.addEventListener("resize", updateViewportSize);
     return () => {
-      window.removeEventListener("resize", updateViewportHeight);
+      window.removeEventListener("resize", updateViewportSize);
     };
   }, [isMounted]);
 
@@ -431,6 +428,7 @@ export default function AttendeePageClient({ sessionId }: AttendeePageClientProp
       getAvailablePageHeight({
         pageOverflowCompensation,
         sessionStatus,
+        viewportWidth,
         viewportHeight,
       }),
       measureChunkHeight,
@@ -453,7 +451,7 @@ export default function AttendeePageClient({ sessionId }: AttendeePageClientProp
 
       return normalizedNextPages;
     });
-  }, [isMounted, pageOverflowCompensation, segments, sessionStatus, viewportHeight]);
+  }, [isMounted, pageOverflowCompensation, segments, sessionStatus, viewportHeight, viewportWidth]);
 
   useLayoutEffect(() => {
     if (!isMounted || viewportHeight === 0 || transcriptPages.length === 0) {
@@ -709,74 +707,6 @@ function renderAttendeeContent({
   });
 }
 
-function createMeasureChunkHeight({
-  measureBlockNode,
-  measureDisplayNode,
-  measureRawNode,
-}: {
-  measureBlockNode: HTMLElement;
-  measureDisplayNode: HTMLParagraphElement;
-  measureRawNode: HTMLParagraphElement;
-}): MeasureChunkHeight {
-  return (rawText, displayText, showFeedbackButtons) => {
-    measureRawNode.textContent = rawText ?? "";
-    measureRawNode.style.display = rawText ? "" : "none";
-    measureDisplayNode.textContent = displayText;
-    measureBlockNode.dataset.showFeedbackButtons = showFeedbackButtons ? "true" : "false";
-    return Math.ceil(measureBlockNode.getBoundingClientRect().height);
-  };
-}
-
-function normalizeTranscriptPages({
-  currentPages,
-  nextPages,
-  nextSlotId,
-}: {
-  currentPages: TranscriptPage[];
-  nextPages: TranscriptPageDraft[];
-  nextSlotId: () => number;
-}) {
-  return nextPages.map((page, pageIndex) => ({
-    key: currentPages[pageIndex]?.key ?? `page-slot-${nextSlotId()}`,
-    chunks: page.chunks.map((chunk, chunkIndex) => ({
-      key: currentPages[pageIndex]?.chunks[chunkIndex]?.key ?? `chunk-${chunk.segmentId}-${chunkIndex}-${nextSlotId()}`,
-      segmentId: chunk.segmentId,
-      rawText: chunk.rawText,
-      displayText: chunk.displayText,
-      isClarified: chunk.isClarified,
-      showFeedbackButtons: chunk.showFeedbackButtons,
-      isFeedbackPending: chunk.isFeedbackPending,
-      feedbackDone: chunk.feedbackDone,
-      feedbackError: chunk.feedbackError,
-      feedbackInference: chunk.feedbackInference,
-      isRepersonalizing: chunk.isRepersonalizing,
-    })),
-  }));
-}
-
-function getAvailablePageHeight({
-  pageOverflowCompensation,
-  sessionStatus,
-  viewportHeight,
-}: {
-  pageOverflowCompensation: number;
-  sessionStatus: SessionStatus | null;
-  viewportHeight: number;
-}) {
-  const reservedHeight = sessionStatus === "AFTER" ? ENDED_LABEL_RESERVED_HEIGHT : 0;
-
-  return Math.max(
-    viewportHeight -
-      PAGE_TOP_PADDING -
-      PAGE_BOTTOM_PADDING -
-      THINKMAN_HEAD_CLEARANCE -
-      reservedHeight -
-      PAGE_BREAK_BUFFER -
-      pageOverflowCompensation,
-    0,
-  );
-}
-
 function clearPageBodyAnimations(trackNode: HTMLDivElement) {
   gsap.set(trackNode.querySelectorAll<HTMLElement>("[data-page-body]"), {
     clearProps: "opacity,transform",
@@ -785,36 +715,4 @@ function clearPageBodyAnimations(trackNode: HTMLDivElement) {
 
 function getPageBody(trackNode: HTMLDivElement, pageIndex: number) {
   return trackNode.querySelector<HTMLElement>(`[data-page-body="${pageIndex}"]`);
-}
-
-function getTrackOffset(pageIndex: number, viewportHeight: number) {
-  return -pageIndex * viewportHeight;
-}
-
-function clampPageIndex(pageIndex: number, pageCount: number) {
-  return Math.min(Math.max(pageIndex, 0), Math.max(pageCount - 1, 0));
-}
-
-function getRenderWindow(pageIndex: number, pageCount: number) {
-  const clampedPageIndex = clampPageIndex(pageIndex, pageCount);
-  const start = Math.max(clampedPageIndex - PAGE_RENDER_WINDOW_RADIUS, 0);
-  const endExclusive = Math.min(clampedPageIndex + PAGE_RENDER_WINDOW_RADIUS + 1, pageCount);
-
-  return {
-    endExclusive,
-    start,
-  };
-}
-
-function syncActivePage({
-  activePageIndexRef,
-  pageIndex,
-  setActivePageIndex,
-}: {
-  activePageIndexRef: { current: number };
-  pageIndex: number;
-  setActivePageIndex: (pageIndex: number) => void;
-}) {
-  activePageIndexRef.current = pageIndex;
-  setActivePageIndex(pageIndex);
 }
