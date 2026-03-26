@@ -77,8 +77,8 @@
   position: absolute;
   right: -4rem;
   bottom: 0;
-  width: clamp(20rem, 56vw, 30rem);
-  height: clamp(20rem, 56vw, 30rem);
+  width: clamp(10rem, 56vw, 20rem);
+  height: clamp(10rem, 56vw, 20rem);
 }
 
 .thinkmanImage {
@@ -91,8 +91,8 @@
 
 .bubbleTail {
   position: absolute;
-  right: 14.5rem;
-  bottom: 11.5rem;
+  right: 5.5rem;
+  bottom: 14rem;
   width: 2rem;
   height: 2rem;
   border: 1px solid #5b5b5b;
@@ -103,13 +103,13 @@
 
 .bubbleButton {
   position: absolute;
-  right: 15rem;
-  bottom: 6rem;
+  right: 0rem;
+  bottom: 17rem;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 6rem;
-  height: 6rem;
+  width: 5rem;
+  height: 5rem;
   pointer-events: auto;
   border: 1px solid #5b5b5b;
   border-radius: 999px;
@@ -123,7 +123,7 @@
 
 .bubbleIcon {
   display: block;
-  font-size: 4rem;
+  font-size: 3rem;
   line-height: 1;
 }
 
@@ -178,7 +178,7 @@
   display: flex;
   flex-direction: column;
   height: 100svh;
-  padding: 2rem 3.75rem 1.5rem 1.5rem;
+  padding: 2rem 1.75rem 1.5rem 1.5rem;
   overflow: hidden;
   scroll-snap-align: start;
   scroll-snap-stop: always;
@@ -187,7 +187,7 @@
 .paper {
   display: flex;
   flex-direction: column;
-  width: min(24.75rem, calc(100vw - 4.5rem));
+  width: min(29rem, calc(100vw - 2rem));
   height: 100%;
 }
 
@@ -266,7 +266,7 @@
 }
 
 .rawText {
-  max-width: 29ch;
+  max-width: 39ch;
   font-size: 14px;
   font-weight: 500;
   line-height: 1.62;
@@ -275,7 +275,7 @@
 }
 
 .displayText {
-  max-width: 23ch;
+  max-width: 31ch;
   margin-top: 0.375rem;
   font-size: 20px;
   font-weight: 900;
@@ -331,15 +331,61 @@
   }
 
   .pageFrame {
-    padding: 2.5rem 6.5rem 2rem 2rem;
+    padding: 2.5rem 5.75rem 2rem 2rem;
   }
 
   .paper {
-    width: min(24.5rem, calc(100vw - 7.75rem));
+    width: min(28.5rem, calc(100vw - 6.75rem));
   }
 
   .thinkmanWrap {
     width: clamp(16rem, 50vw, 22rem);
     height: clamp(16rem, 50vw, 22rem);
+  }
+}
+
+@media (min-width: 1024px) {
+  .decorationRail {
+    width: clamp(18rem, 23vw, 23rem);
+  }
+
+  .pageFrame {
+    padding: 3rem clamp(11.5rem, 17vw, 15rem) 2.25rem clamp(3rem, 4.5vw, 4.25rem);
+  }
+
+  .paper {
+    width: min(66rem, calc(100vw - clamp(14rem, 20vw, 18rem) - clamp(4.25rem, 6vw, 6.5rem)));
+  }
+
+  .chunkList {
+    gap: 2rem;
+  }
+
+  .rawText {
+    max-width: 62ch;
+    font-size: 15px;
+    line-height: 1.68;
+  }
+
+  .displayText {
+    max-width: 50ch;
+    font-size: 21px;
+    line-height: 1.52;
+  }
+
+  .thinkmanWrap {
+    right: -2.75rem;
+    width: clamp(16rem, 24vw, 20rem);
+    height: clamp(16rem, 24vw, 20rem);
+  }
+
+  .bubbleTail {
+    right: clamp(13.5rem, 18vw, 16.5rem);
+    bottom: 10.5rem;
+  }
+
+  .bubbleButton {
+    right: clamp(14rem, 18.5vw, 17rem);
+    bottom: 5rem;
   }
 }

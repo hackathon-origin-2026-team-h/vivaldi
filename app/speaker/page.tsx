@@ -2,6 +2,7 @@
 
 import { DeepgramClient } from "@deepgram/sdk";
 import { Kosugi_Maru } from "next/font/google";
+import Image from "next/image";
 import QRCode from "qrcode";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -301,8 +302,7 @@ export default function SpeakerPage() {
           </p>
 
           {qrDataUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={qrDataUrl} alt="参加者用QRコード" width={180} height={180} className="rounded-xl" />
+            <Image src={qrDataUrl} alt="参加者用QRコード" width={180} height={180} className="rounded-xl" unoptimized />
           ) : (
             <div
               className="w-[180px] h-[180px] rounded-xl flex items-center justify-center"
