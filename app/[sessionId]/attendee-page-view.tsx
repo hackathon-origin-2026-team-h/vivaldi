@@ -65,6 +65,48 @@ export function AttendeeViewport({
   const bubbleTailRef = useRef<HTMLSpanElement>(null);
   const bubbleContentRef = useRef<HTMLSpanElement>(null);
   const confettiRefs = useRef<Array<HTMLSpanElement | null>>([]);
+  const localViewportRef = useRef<HTMLDivElement | null>(null);
+  const onTouchStartRef = useRef(onTouchStart);
+  const onTouchEndRef = useRef(onTouchEnd);
+  onTouchStartRef.current = onTouchStart;
+  onTouchEndRef.current = onTouchEnd;
+
+  useEffect(() => {
+    const el = localViewportRef.current;
+    if (!el) return;
+
+    let startX = 0;
+    let startY = 0;
+
+    const handleTouchStart = (e: TouchEvent) => {
+      startX = e.touches[0]?.clientX ?? 0;
+      startY = e.touches[0]?.clientY ?? 0;
+      onTouchStartRef.current?.(startY);
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      const deltaX = Math.abs((e.touches[0]?.clientX ?? 0) - startX);
+      const deltaY = Math.abs((e.touches[0]?.clientY ?? 0) - startY);
+      // 縦方向のジェスチャと判断したら iOS Safari のスクロール・プルトゥリフレッシュを止める
+      if (deltaY > deltaX) {
+        e.preventDefault();
+      }
+    };
+
+    const handleTouchEnd = (e: TouchEvent) => {
+      onTouchEndRef.current?.(e.changedTouches[0]?.clientY ?? 0);
+    };
+
+    el.addEventListener("touchstart", handleTouchStart, { passive: false });
+    el.addEventListener("touchmove", handleTouchMove, { passive: false });
+    el.addEventListener("touchend", handleTouchEnd, { passive: false });
+
+    return () => {
+      el.removeEventListener("touchstart", handleTouchStart);
+      el.removeEventListener("touchmove", handleTouchMove);
+      el.removeEventListener("touchend", handleTouchEnd);
+    };
+  }, []);
   const { isClosing, visual: temporaryBubbleVisual } = useTemporaryBubbleVisual({
     questionBubbleNonce,
     thumbsupBubbleNonce,
@@ -127,14 +169,11 @@ export function AttendeeViewport({
 
       <div className={styles.viewportShell}>
         <div
-          ref={viewportRef}
+          ref={(el) => {
+            localViewportRef.current = el;
+            if (viewportRef) viewportRef.current = el;
+          }}
           className={styles.viewportStage}
-          onTouchEnd={(event) => {
-            onTouchEnd?.(event.changedTouches[0]?.clientY ?? 0);
-          }}
-          onTouchStart={(event) => {
-            onTouchStart?.(event.touches[0]?.clientY ?? 0);
-          }}
           onWheel={(event) => {
             onWheelNavigate?.(event.deltaY);
           }}
