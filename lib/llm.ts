@@ -1,5 +1,10 @@
 import * as v from "valibot";
-import { extractText, getClient, parseJsonResponse } from "@/lib/claude";
+import {
+  BASE_SYSTEM_PROMPT,
+  extractText,
+  getClient,
+  parseJsonResponse,
+} from "@/lib/claude";
 
 const MODEL = "claude-haiku-4-5-20251001";
 
@@ -44,11 +49,15 @@ async function callLLMJson(system: string, text: string): Promise<string> {
   }
 }
 
+const REMOVE_FILLERS_SYSTEM = `${BASE_SYSTEM_PROMPT}
+
+## タスク
+「えー」「あの」「まあ」「えっと」などの言い淀みを除去してください。
+以下のJSON形式のみで返してください（前置きテキスト不要）:
+{"result": "修正後のテキスト"}`;
+
 async function removeFillersStep(text: string): Promise<string> {
-  return callLLMJson(
-    '「えー」「あの」「まあ」「えっと」などの言い淀みを除去してください。意味のある言葉は一切変えないこと。以下のJSON形式のみで返してください（前置きテキスト不要）:\n{"result": "修正後のテキスト"}ただし、テキストが提供されていない、もしくは修正の必要がない場合は、元のテキストをそのまま返してください。',
-    text,
-  );
+  return callLLMJson(REMOVE_FILLERS_SYSTEM, text);
 }
 
 const SimplifyResponseSchema = v.object({
@@ -56,12 +65,20 @@ const SimplifyResponseSchema = v.object({
   terms: v.array(v.object({ word: v.string(), explanation: v.string() })),
 });
 
-async function simplifyStep(text: string): Promise<{ output: string; terms: Term[] }> {
+const SIMPLIFY_SYSTEM = `${BASE_SYSTEM_PROMPT}
+
+## タスク
+専門用語・難しい言葉を小学生でもわかる言葉に言い換えてください。専門用語と平易化した説明のペアも抽出してください。
+以下のJSON形式のみで返してください（マークダウン・前置きテキスト不要）:
+{"text": "平易化された文章", "terms": [{"word": "専門用語", "explanation": "平易化された説明"}]}`;
+
+async function simplifyStep(
+  text: string,
+): Promise<{ output: string; terms: Term[] }> {
   const response = await getClient().messages.create({
     model: MODEL,
     max_tokens: 2048,
-    system:
-      '専門用語・難しい言葉を小学生でもわかる言葉に言い換えてください。元の文章の意味・ニュアンスを変えないこと。以下のJSON形式のみで返してください（マークダウン・前置きテキスト不要）:\n{"text": "平易化された文章", "terms": [{"word": "専門用語", "explanation": "平易化された説明"}]}',
+    system: SIMPLIFY_SYSTEM,
     messages: [{ role: "user", content: text }],
   });
   const raw = extractText(response);
@@ -74,14 +91,21 @@ async function simplifyStep(text: string): Promise<{ output: string; terms: Term
   }
 }
 
+const TRANSLATE_SYSTEM = `${BASE_SYSTEM_PROMPT}
+
+## タスク
+日本語を自然な英語に翻訳してください。
+以下のJSON形式のみで返してください（前置きテキスト不要）:
+{"result": "翻訳後のテキスト"}`;
+
 async function translateStep(text: string): Promise<string> {
-  return callLLMJson(
-    '日本語を自然な英語に翻訳してください。以下のJSON形式のみで返してください（前置きテキスト不要）:\n{"result": "翻訳後のテキスト"}',
-    text,
-  );
+  return callLLMJson(TRANSLATE_SYSTEM, text);
 }
 
-export async function runPipeline(text: string, steps: PipelineStep[]): Promise<PipelineResult> {
+export async function runPipeline(
+  text: string,
+  steps: PipelineStep[],
+): Promise<PipelineResult> {
   const stepResults: PipelineResult["steps"] = [];
   let current = text;
   let terms: Term[] = [];

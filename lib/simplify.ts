@@ -1,5 +1,5 @@
 import * as v from "valibot";
-import { extractText, getClient, parseJsonResponse } from "@/lib/claude";
+import { BASE_SYSTEM_PROMPT, extractText, getClient, parseJsonResponse } from "@/lib/claude";
 
 const SimplifyResponseSchema = v.object({
   simplified: v.string(),
@@ -22,7 +22,11 @@ export type SimplifiedResult = {
   terms: Term[];
 };
 
-const SYSTEM_PROMPT = `専門用語・難しい言葉を小学生でもわかる言葉に言い換えてください。元の文章の意味・ニュアンスを変えないこと。専門用語と平易化した説明のペアも抽出してください。以下のJSON形式のみで返してください（マークダウン・前置きテキスト不要）:
+const SYSTEM_PROMPT = `${BASE_SYSTEM_PROMPT}
+
+## タスク
+専門用語・難しい言葉を小学生でもわかる言葉に言い換えてください。専門用語と平易化した説明のペアも抽出してください。
+以下のJSON形式のみで返してください（マークダウン・前置きテキスト不要）:
 {"simplified": "平易化された文章", "terms": [{"word": "専門用語", "explanation": "平易化された説明"}]}`;
 
 export async function simplify(text: string): Promise<SimplifiedResult> {

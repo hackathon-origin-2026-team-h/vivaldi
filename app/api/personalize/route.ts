@@ -1,10 +1,27 @@
 import { NextResponse } from "next/server";
 import * as v from "valibot";
-import { handleApiError, parseBody, TextWithPersonaBodySchema } from "@/lib/api";
-import { extractText, getClient, parseJsonResponse } from "@/lib/claude";
+import {
+  handleApiError,
+  parseBody,
+  TextWithPersonaBodySchema,
+} from "@/lib/api";
+import {
+  BASE_SYSTEM_PROMPT,
+  extractText,
+  getClient,
+  parseJsonResponse,
+} from "@/lib/claude";
 import { parsePersona, type UserPersona } from "@/lib/persona";
 
 const PersonalizeResponseSchema = v.object({ result: v.string() });
+
+const SYSTEM_PROMPT = `${BASE_SYSTEM_PROMPT}
+
+## タスク
+発表テキストを聴講者の特性に合わせて意訳してください。
+- 専門用語は聴講者が知らない可能性がある場合、括弧で簡潔な説明を補足する
+- 意訳できない場合は元々のテキストをそのまま返す
+- 意訳に成功した場合、以下のJSON形式のみで返す（前置きテキスト不要）: {"result": "意訳後のテキスト"}`;
 
 function summarizePersona(persona: UserPersona): string {
   const parts: string[] = [];
@@ -32,22 +49,15 @@ export async function POST(request: Request) {
     const response = await getClient().messages.create({
       model: "claude-haiku-4-5-20251001",
       max_tokens: 1024,
+      system: SYSTEM_PROMPT,
       messages: [
         {
           role: "user",
-          content: `以下の発表テキストを、聴講者が理解しやすい表現に意訳してください。
-
-【聴講者の特性】
+          content: `【聴講者の特性】
 ${summarizePersona(persona)}
 
 【元のテキスト】
-${text}
-
-ルール:
-- 内容を変えず、表現だけを平易にする
-- 専門用語は聴講者が知らない可能性がある場合、括弧で簡潔な説明を補足する
-- 意訳できない場合は、abortとだけ返す
-- 意訳に成功した場合、以下のJSON形式のみで返す（前置きテキスト不要）: {"result": "意訳後のテキスト"}`,
+${text}`,
         },
       ],
     });
